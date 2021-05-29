@@ -14,8 +14,8 @@ fn build_menu(otp_entries: &[OtpEntry]) -> gtk::Menu {
 
     for entry in otp_entries {
         let display = format!("{}: {}", entry.name, entry.otp);
-        let menu_item = gtk::MenuItem::with_label(&display);
-        menu.append(&menu_item);
+        let otp_item = gtk::MenuItem::with_label(&display);
+        menu.append(&otp_item);
     }
 
     let mi = gtk::CheckMenuItem::with_label("Quit");
