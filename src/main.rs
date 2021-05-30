@@ -15,7 +15,7 @@ use gtk::prelude::*;
 use libappindicator::{AppIndicator, AppIndicatorStatus};
 
 lazy_static! {
-    static ref APP: Arc<AtomicImmut<AppState>> = Arc::new(AtomicImmut::new(AppState::new()));
+    static ref APP_STATE: Arc<AtomicImmut<AppState>> = Arc::new(AtomicImmut::new(AppState::new()));
 }
 
 struct OtpEntry {
@@ -53,14 +53,14 @@ impl AppState {
 fn build_menu(otp_entries: &[OtpEntry]) -> gtk::Menu {
     let menu = gtk::Menu::new();
 
-    let mut new_app_state = AppState::clone(&APP.load());
+    let mut new_app_state = AppState::clone(&APP_STATE.load());
     for entry in otp_entries {
         let display = format!("{}: {}", entry.name, entry.otp);
         let otp_item = gtk::MenuItem::with_label(&display);
         otp_item.connect_activate(|menu_item| {
             let atom = gdk::Atom::intern("CLIPBOARD");
             let clipboard = gtk::Clipboard::get(&atom);
-            let app_state = APP.load();
+            let app_state = APP_STATE.load();
             match app_state.get_otp_value(&menu_item) {
                 Some(code) => clipboard.set_text(code),
                 None => {}
@@ -76,19 +76,33 @@ fn build_menu(otp_entries: &[OtpEntry]) -> gtk::Menu {
     });
     menu.append(&mi);
 
-    APP.store(new_app_state);
+    APP_STATE.store(new_app_state);
     menu
+}
+
+fn random_otp() -> String {
+    use rand::Rng;
+
+    let mut rng = rand::thread_rng();
+
+    let mut otp = String::new();
+    for _ in 0..5 {
+        let n: u32 = rng.gen_range(0..10);
+        otp.push_str(&format!("{}", n));
+    }
+
+    otp
 }
 
 fn generate_otp_entries() -> Vec<OtpEntry> {
     vec![
         OtpEntry {
             name: "Amazon".to_string(),
-            otp: "39480".to_string(),
+            otp: random_otp(),
         },
         OtpEntry {
             name: "Dropbox".to_string(),
-            otp: "43909".to_string(),
+            otp: random_otp(),
         },
     ]
 }
