@@ -1,6 +1,8 @@
 #[macro_use]
 extern crate lazy_static;
 
+use atomic_immut::AtomicImmut;
+
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 
@@ -8,13 +10,12 @@ use std::env;
 use std::hash::{Hash, Hasher};
 use std::path::Path;
 use std::sync::Arc;
-use std::sync::Mutex;
 
 use gtk::prelude::*;
 use libappindicator::{AppIndicator, AppIndicatorStatus};
 
 lazy_static! {
-    static ref APP: Arc<Mutex<AppState>> = Arc::new(Mutex::new(AppState::new()));
+    static ref APP: Arc<AtomicImmut<AppState>> = Arc::new(AtomicImmut::new(AppState::new()));
 }
 
 struct OtpEntry {
@@ -22,6 +23,7 @@ struct OtpEntry {
     otp: String,
 }
 
+#[derive(Clone)]
 struct AppState {
     otp_codes: HashMap<u64, String>,
 }
@@ -46,31 +48,26 @@ impl AppState {
         let key = hasher.finish();
         self.otp_codes.get(&key)
     }
-
-    fn clear_otp_codes(&mut self) {
-        self.otp_codes.clear();
-    }
 }
 
 fn build_menu(otp_entries: &[OtpEntry]) -> gtk::Menu {
     let menu = gtk::Menu::new();
 
-    let mut app = APP.lock().unwrap();
-    app.clear_otp_codes();
+    let mut new_app_state = AppState::clone(&APP.load());
     for entry in otp_entries {
         let display = format!("{}: {}", entry.name, entry.otp);
         let otp_item = gtk::MenuItem::with_label(&display);
         otp_item.connect_activate(|menu_item| {
             let atom = gdk::Atom::intern("CLIPBOARD");
             let clipboard = gtk::Clipboard::get(&atom);
-            let app = APP.lock().unwrap();
-            match app.get_otp_value(&menu_item) {
+            let app_state = APP.load();
+            match app_state.get_otp_value(&menu_item) {
                 Some(code) => clipboard.set_text(code),
                 None => {}
             }
         });
         menu.append(&otp_item);
-        app.add_otp_value(&otp_item, entry.otp.clone());
+        new_app_state.add_otp_value(&otp_item, entry.otp.clone());
     }
 
     let mi = gtk::CheckMenuItem::with_label("Quit");
@@ -78,6 +75,8 @@ fn build_menu(otp_entries: &[OtpEntry]) -> gtk::Menu {
         gtk::main_quit();
     });
     menu.append(&mi);
+
+    APP.store(new_app_state);
     menu
 }
 
