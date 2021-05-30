@@ -48,12 +48,16 @@ impl AppState {
         let key = hasher.finish();
         self.otp_codes.get(&key)
     }
+
+    fn menu_reset(&self) -> Self {
+        Self::new()
+    }
 }
 
 fn build_menu(otp_entries: &[OtpEntry]) -> gtk::Menu {
     let menu = gtk::Menu::new();
 
-    let mut new_app_state = AppState::clone(&APP_STATE.load());
+    let mut new_app_state = APP_STATE.load().menu_reset();
     for entry in otp_entries {
         let display = format!("{}: {}", entry.name, entry.otp);
         let otp_item = gtk::MenuItem::with_label(&display);
