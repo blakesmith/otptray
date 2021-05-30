@@ -61,9 +61,8 @@ fn build_menu(otp_entries: &[OtpEntry]) -> gtk::Menu {
             let atom = gdk::Atom::intern("CLIPBOARD");
             let clipboard = gtk::Clipboard::get(&atom);
             let app_state = APP_STATE.load();
-            match app_state.get_otp_value(&menu_item) {
-                Some(code) => clipboard.set_text(code),
-                None => {}
+            if let Some(code) = app_state.get_otp_value(&menu_item) {
+                clipboard.set_text(code);
             }
         });
         menu.append(&otp_item);
@@ -107,6 +106,12 @@ fn generate_otp_entries() -> Vec<OtpEntry> {
     ]
 }
 
+fn periodic_otp_task(indicator: &mut AppIndicator) {
+    let mut menu = build_menu(&generate_otp_entries());
+    indicator.set_menu(&mut menu);
+    menu.show_all();
+}
+
 fn main() {
     gtk::init().unwrap();
     let mut indicator = AppIndicator::new("OTP Tray", "");
@@ -115,8 +120,10 @@ fn main() {
     indicator.set_icon_theme_path(icon_path.to_str().unwrap());
     indicator.set_icon_full("rust-logo-64x64-white", "icon");
 
-    let mut menu = build_menu(&generate_otp_entries());
-    indicator.set_menu(&mut menu);
-    menu.show_all();
+    periodic_otp_task(&mut indicator);
+    gtk::timeout_add_seconds(1, move || {
+        periodic_otp_task(&mut indicator);
+        Continue(true)
+    });
     gtk::main();
 }
