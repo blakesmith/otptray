@@ -113,11 +113,15 @@ fn build_menu() -> gtk::Menu {
         new_app_state.add_otp_value(&otp_item, otp_value.otp.clone());
     }
 
-    let mi = gtk::CheckMenuItem::with_label("Quit");
-    mi.connect_activate(|_| {
+    menu.append(&gtk::SeparatorMenuItem::new());
+
+    let setup_item = gtk::MenuItem::with_label("Setup");
+    let quit_item = gtk::MenuItem::with_label("Quit");
+    quit_item.connect_activate(|_| {
         gtk::main_quit();
     });
-    menu.append(&mi);
+    menu.append(&setup_item);
+    menu.append(&quit_item);
 
     APP_STATE.store(new_app_state);
     menu
