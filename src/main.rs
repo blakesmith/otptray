@@ -12,7 +12,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use totp_lite::{totp_custom, Sha1, DEFAULT_STEP};
+use totp_lite::{totp_custom, Sha1, Sha256, Sha512, DEFAULT_STEP};
 
 use gtk::prelude::*;
 use libappindicator::{AppIndicator, AppIndicatorStatus};
@@ -41,12 +41,27 @@ impl OtpEntry {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        let otp = totp_custom::<Sha1>(
-            self.step,
-            self.digit_count,
-            self.secret_hash.as_bytes(),
-            unix_epoch,
-        );
+        let otp = match &self.hash_fn[..] {
+            "sha1" => totp_custom::<Sha1>(
+                self.step,
+                self.digit_count,
+                self.secret_hash.as_bytes(),
+                unix_epoch,
+            ),
+            "sha256" => totp_custom::<Sha256>(
+                self.step,
+                self.digit_count,
+                self.secret_hash.as_bytes(),
+                unix_epoch,
+            ),
+            "sha512" => totp_custom::<Sha512>(
+                self.step,
+                self.digit_count,
+                self.secret_hash.as_bytes(),
+                unix_epoch,
+            ),
+            other => panic!("Unknown hash function: {}", other),
+        };
         OtpValue {
             name: self.name.clone(),
             otp,
