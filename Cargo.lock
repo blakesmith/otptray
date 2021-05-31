@@ -690,6 +690,7 @@ version = "0.1.0"
 dependencies = [
  "atomic_immut",
  "gdk",
+ "glib",
  "gtk",
  "lazy_static",
  "libappindicator",

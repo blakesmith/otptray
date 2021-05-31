@@ -142,7 +142,7 @@ fn main() {
     indicator.set_icon_full("rust-logo-64x64-white", "icon");
 
     periodic_otp_task(&mut indicator);
-    gtk::timeout_add_seconds(10, move || {
+    glib::timeout_add_seconds_local(10, move || {
         periodic_otp_task(&mut indicator);
         Continue(true)
     });
