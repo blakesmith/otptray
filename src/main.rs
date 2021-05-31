@@ -3,6 +3,7 @@ extern crate lazy_static;
 
 use atomic_immut::AtomicImmut;
 
+use serde::Deserialize;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 
@@ -12,13 +13,33 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use totp_lite::{totp_custom, Sha1, Sha256, Sha512, DEFAULT_STEP};
+use totp_lite::{totp_custom, Sha1, Sha256, Sha512};
 
 use gtk::prelude::*;
 use libappindicator::{AppIndicator, AppIndicatorStatus};
 
 lazy_static! {
-    static ref APP_STATE: Arc<AtomicImmut<AppState>> = Arc::new(AtomicImmut::new(AppState::new()));
+    static ref APP_STATE: Arc<AtomicImmut<AppState>> =
+        Arc::new(AtomicImmut::new(Default::default()));
+}
+
+#[derive(Debug)]
+enum Error {
+    NoUserConfigDir,
+    YAML(serde_yaml::Error),
+    Io(std::io::Error),
+}
+
+impl From<serde_yaml::Error> for Error {
+    fn from(err: serde_yaml::Error) -> Error {
+        Error::YAML(err)
+    }
+}
+
+impl From<std::io::Error> for Error {
+    fn from(err: std::io::Error) -> Error {
+        Error::Io(err)
+    }
 }
 
 struct OtpValue {
@@ -26,13 +47,18 @@ struct OtpValue {
     otp: String,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deserialize)]
 struct OtpEntry {
     name: String,
     step: u64,
     secret_hash: String,
     hash_fn: String,
     digit_count: u32,
+}
+
+#[derive(Debug, Deserialize)]
+struct OtpTrayConfig {
+    entries: Vec<OtpEntry>,
 }
 
 impl OtpEntry {
@@ -75,27 +101,31 @@ struct AppState {
     otp_codes: HashMap<u64, String>,
 }
 
-impl AppState {
-    fn new() -> Self {
-        AppState {
-            // TODO: Replace with a config load
-            otp_entries: vec![
-                OtpEntry {
-                    name: "Amazon".to_string(),
-                    secret_hash: "12345678901234567890".to_string(),
-                    hash_fn: "sha1".to_string(),
-                    digit_count: 6,
-                    step: DEFAULT_STEP,
-                },
-                OtpEntry {
-                    name: "Dropbox".to_string(),
-                    secret_hash: "12345678901234567891".to_string(),
-                    hash_fn: "sha1".to_string(),
-                    digit_count: 6,
-                    step: DEFAULT_STEP,
-                },
-            ],
+impl Default for AppState {
+    fn default() -> Self {
+        Self {
+            otp_entries: Vec::new(),
             otp_codes: HashMap::new(),
+        }
+    }
+}
+
+impl AppState {
+    fn load_from_config() -> Result<AppState, Error> {
+        use std::fs::OpenOptions;
+
+        let config_dir = dirs::config_dir().ok_or(Error::NoUserConfigDir)?;
+        let config_file_path = config_dir.join("otptray.yaml");
+        match OpenOptions::new().read(true).open(config_file_path) {
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(Default::default()),
+            Err(err) => Err(err.into()),
+            Ok(file) => {
+                let config: OtpTrayConfig = serde_yaml::from_reader(&file)?;
+                Ok(AppState {
+                    otp_entries: config.entries,
+                    ..Default::default()
+                })
+            }
         }
     }
 
@@ -114,7 +144,10 @@ impl AppState {
     }
 
     fn menu_reset(&self) -> Self {
-        Self::new()
+        Self {
+            otp_entries: self.otp_entries.clone(),
+            ..Default::default()
+        }
     }
 }
 
@@ -123,20 +156,26 @@ fn build_menu() -> gtk::Menu {
 
     let app_state = APP_STATE.load();
     let mut new_app_state = app_state.menu_reset();
-    for entry in &app_state.otp_entries {
-        let otp_value = entry.get_otp_value();
-        let display = format!("{}: {}", otp_value.name, otp_value.otp);
-        let otp_item = gtk::MenuItem::with_label(&display);
-        otp_item.connect_activate(|menu_item| {
-            let atom = gdk::Atom::intern("CLIPBOARD");
-            let clipboard = gtk::Clipboard::get(&atom);
-            let app_state = APP_STATE.load();
-            if let Some(code) = app_state.get_otp_value(&menu_item) {
-                clipboard.set_text(code);
-            }
-        });
-        menu.append(&otp_item);
-        new_app_state.add_otp_value(&otp_item, otp_value.otp.clone());
+    if app_state.otp_entries.len() > 0 {
+        for entry in &app_state.otp_entries {
+            let otp_value = entry.get_otp_value();
+            let display = format!("{}: {}", otp_value.name, otp_value.otp);
+            let otp_item = gtk::MenuItem::with_label(&display);
+            otp_item.connect_activate(|menu_item| {
+                let atom = gdk::Atom::intern("CLIPBOARD");
+                let clipboard = gtk::Clipboard::get(&atom);
+                let app_state = APP_STATE.load();
+                if let Some(code) = app_state.get_otp_value(&menu_item) {
+                    clipboard.set_text(code);
+                }
+            });
+            menu.append(&otp_item);
+            new_app_state.add_otp_value(&otp_item, otp_value.otp.clone());
+        }
+    } else {
+        menu.append(&gtk::MenuItem::with_label(
+            "No OTP entries. Start with setup",
+        ));
     }
 
     menu.append(&gtk::SeparatorMenuItem::new());
@@ -161,6 +200,10 @@ fn periodic_otp_task(indicator: &mut AppIndicator) {
 
 fn main() {
     gtk::init().unwrap();
+
+    let app_state = AppState::load_from_config().expect("Cannot load OTPTrap config!");
+    APP_STATE.store(app_state);
+
     let mut indicator = AppIndicator::new("OTP Tray", "");
     indicator.set_status(AppIndicatorStatus::Active);
     let icon_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
