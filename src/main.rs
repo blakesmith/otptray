@@ -10,6 +10,9 @@ use std::env;
 use std::hash::{Hash, Hasher};
 use std::path::Path;
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use totp_lite::{totp, Sha1};
 
 use gtk::prelude::*;
 use libappindicator::{AppIndicator, AppIndicatorStatus};
@@ -18,19 +21,54 @@ lazy_static! {
     static ref APP_STATE: Arc<AtomicImmut<AppState>> = Arc::new(AtomicImmut::new(AppState::new()));
 }
 
-struct OtpEntry {
+struct OtpValue {
     name: String,
     otp: String,
 }
 
+#[derive(Clone, Debug)]
+struct OtpEntry {
+    name: String,
+    secret_hash: String,
+    hash_fn: String,
+}
+
+impl OtpEntry {
+    fn get_otp_value(&self) -> OtpValue {
+        let unix_epoch = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let otp = totp::<Sha1>(self.secret_hash.as_bytes(), unix_epoch);
+        OtpValue {
+            name: self.name.clone(),
+            otp,
+        }
+    }
+}
+
 #[derive(Clone)]
 struct AppState {
+    otp_entries: Vec<OtpEntry>,
     otp_codes: HashMap<u64, String>,
 }
 
 impl AppState {
     fn new() -> Self {
         AppState {
+            // TODO: Replace with a config load
+            otp_entries: vec![
+                OtpEntry {
+                    name: "Amazon".to_string(),
+                    secret_hash: "12345678901234567890".to_string(),
+                    hash_fn: "sha1".to_string(),
+                },
+                OtpEntry {
+                    name: "Dropbox".to_string(),
+                    secret_hash: "12345678901234567891".to_string(),
+                    hash_fn: "sha1".to_string(),
+                },
+            ],
             otp_codes: HashMap::new(),
         }
     }
@@ -54,12 +92,14 @@ impl AppState {
     }
 }
 
-fn build_menu(otp_entries: &[OtpEntry]) -> gtk::Menu {
+fn build_menu() -> gtk::Menu {
     let menu = gtk::Menu::new();
 
-    let mut new_app_state = APP_STATE.load().menu_reset();
-    for entry in otp_entries {
-        let display = format!("{}: {}", entry.name, entry.otp);
+    let app_state = APP_STATE.load();
+    let mut new_app_state = app_state.menu_reset();
+    for entry in &app_state.otp_entries {
+        let otp_value = entry.get_otp_value();
+        let display = format!("{}: {}", otp_value.name, otp_value.otp);
         let otp_item = gtk::MenuItem::with_label(&display);
         otp_item.connect_activate(|menu_item| {
             let atom = gdk::Atom::intern("CLIPBOARD");
@@ -70,7 +110,7 @@ fn build_menu(otp_entries: &[OtpEntry]) -> gtk::Menu {
             }
         });
         menu.append(&otp_item);
-        new_app_state.add_otp_value(&otp_item, entry.otp.clone());
+        new_app_state.add_otp_value(&otp_item, otp_value.otp.clone());
     }
 
     let mi = gtk::CheckMenuItem::with_label("Quit");
@@ -83,35 +123,8 @@ fn build_menu(otp_entries: &[OtpEntry]) -> gtk::Menu {
     menu
 }
 
-fn random_otp() -> String {
-    use rand::Rng;
-
-    let mut rng = rand::thread_rng();
-
-    let mut otp = String::new();
-    for _ in 0..5 {
-        let n: u32 = rng.gen_range(0..10);
-        otp.push_str(&format!("{}", n));
-    }
-
-    otp
-}
-
-fn generate_otp_entries() -> Vec<OtpEntry> {
-    vec![
-        OtpEntry {
-            name: "Amazon".to_string(),
-            otp: random_otp(),
-        },
-        OtpEntry {
-            name: "Dropbox".to_string(),
-            otp: random_otp(),
-        },
-    ]
-}
-
 fn periodic_otp_task(indicator: &mut AppIndicator) {
-    let mut menu = build_menu(&generate_otp_entries());
+    let mut menu = build_menu();
     indicator.set_menu(&mut menu);
     menu.show_all();
 }
@@ -125,7 +138,7 @@ fn main() {
     indicator.set_icon_full("rust-logo-64x64-white", "icon");
 
     periodic_otp_task(&mut indicator);
-    gtk::timeout_add_seconds(1, move || {
+    gtk::timeout_add_seconds(10, move || {
         periodic_otp_task(&mut indicator);
         Continue(true)
     });
