@@ -12,7 +12,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use totp_lite::{totp, Sha1};
+use totp_lite::{totp_custom, Sha1, DEFAULT_STEP};
 
 use gtk::prelude::*;
 use libappindicator::{AppIndicator, AppIndicatorStatus};
@@ -29,8 +29,10 @@ struct OtpValue {
 #[derive(Clone, Debug)]
 struct OtpEntry {
     name: String,
+    step: u64,
     secret_hash: String,
     hash_fn: String,
+    digit_count: u32,
 }
 
 impl OtpEntry {
@@ -39,7 +41,12 @@ impl OtpEntry {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        let otp = totp::<Sha1>(self.secret_hash.as_bytes(), unix_epoch);
+        let otp = totp_custom::<Sha1>(
+            self.step,
+            self.digit_count,
+            self.secret_hash.as_bytes(),
+            unix_epoch,
+        );
         OtpValue {
             name: self.name.clone(),
             otp,
@@ -62,11 +69,15 @@ impl AppState {
                     name: "Amazon".to_string(),
                     secret_hash: "12345678901234567890".to_string(),
                     hash_fn: "sha1".to_string(),
+                    digit_count: 6,
+                    step: DEFAULT_STEP,
                 },
                 OtpEntry {
                     name: "Dropbox".to_string(),
                     secret_hash: "12345678901234567891".to_string(),
                     hash_fn: "sha1".to_string(),
+                    digit_count: 6,
+                    step: DEFAULT_STEP,
                 },
             ],
             otp_codes: HashMap::new(),
