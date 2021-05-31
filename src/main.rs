@@ -67,25 +67,15 @@ impl OtpEntry {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs();
+        let secret = base32::decode(
+            base32::Alphabet::RFC4648 { padding: false },
+            &self.secret_hash,
+        )
+        .unwrap_or(vec![]);
         let otp = match &self.hash_fn[..] {
-            "sha1" => totp_custom::<Sha1>(
-                self.step,
-                self.digit_count,
-                self.secret_hash.as_bytes(),
-                unix_epoch,
-            ),
-            "sha256" => totp_custom::<Sha256>(
-                self.step,
-                self.digit_count,
-                self.secret_hash.as_bytes(),
-                unix_epoch,
-            ),
-            "sha512" => totp_custom::<Sha512>(
-                self.step,
-                self.digit_count,
-                self.secret_hash.as_bytes(),
-                unix_epoch,
-            ),
+            "sha1" => totp_custom::<Sha1>(self.step, self.digit_count, &secret, unix_epoch),
+            "sha256" => totp_custom::<Sha256>(self.step, self.digit_count, &secret, unix_epoch),
+            "sha512" => totp_custom::<Sha512>(self.step, self.digit_count, &secret, unix_epoch),
             other => panic!("Unknown hash function: {}", other),
         };
         OtpValue {
