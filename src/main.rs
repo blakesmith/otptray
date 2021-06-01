@@ -71,7 +71,7 @@ impl OtpEntry {
             base32::Alphabet::RFC4648 { padding: false },
             &self.secret_hash,
         )
-        .unwrap_or(vec![]);
+        .unwrap_or(vec![]); // TODO: Proper error handling.
         let otp = match &self.hash_fn[..] {
             "sha1" => totp_custom::<Sha1>(self.step, self.digit_count, &secret, unix_epoch),
             "sha256" => totp_custom::<Sha256>(self.step, self.digit_count, &secret, unix_epoch),
@@ -141,6 +141,14 @@ impl AppState {
     }
 }
 
+fn setup_window() {
+    let window = gtk::WindowBuilder::new().build();
+    window.set_title("OTPTray Setup");
+    window.set_default_size(250, 250);
+    window.set_position(gtk::WindowPosition::Center);
+    window.show_all();
+}
+
 fn build_menu() -> gtk::Menu {
     let menu = gtk::Menu::new();
 
@@ -171,6 +179,9 @@ fn build_menu() -> gtk::Menu {
     menu.append(&gtk::SeparatorMenuItem::new());
 
     let setup_item = gtk::MenuItem::with_label("Setup");
+    setup_item.connect_activate(|_| {
+        setup_window();
+    });
     let quit_item = gtk::MenuItem::with_label("Quit");
     quit_item.connect_activate(|_| {
         gtk::main_quit();
