@@ -143,11 +143,11 @@ impl AppState {
 
 fn setup_page() -> gtk::Box {
     let gtk_box = gtk::BoxBuilder::new()
-        .orientation(gtk::Orientation::Horizontal)
-        .halign(gtk::Align::Center)
+        .orientation(gtk::Orientation::Vertical)
         .build();
     let label = gtk::LabelBuilder::new().label("OTP Setup").build();
     gtk_box.add(&label);
+    gtk_box.add(&otp_configuration());
     gtk_box
 }
 
@@ -159,6 +159,22 @@ fn about_page() -> gtk::Box {
     let label = gtk::LabelBuilder::new().label("About OTPTray").build();
     gtk_box.add(&label);
     gtk_box
+}
+
+fn otp_configuration() -> gtk::ScrolledWindow {
+    let row = gtk::ListBoxRowBuilder::new()
+        .child(&gtk::LabelBuilder::new().label("Google").build())
+        .build();
+    let otp_list = gtk::ListBoxBuilder::new()
+        .selection_mode(gtk::SelectionMode::Single)
+        .build();
+    otp_list.add(&row);
+    let viewport = gtk::ViewportBuilder::new().child(&otp_list).build();
+    let window = gtk::ScrolledWindowBuilder::new()
+        .hexpand(true)
+        .child(&viewport)
+        .build();
+    window
 }
 
 fn setup_window() {
