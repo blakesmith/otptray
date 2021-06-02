@@ -142,10 +142,30 @@ impl AppState {
 }
 
 fn setup_window() {
+    let setup_page = gtk::LabelBuilder::new().label("Setup Page").build();
+    let about_page = gtk::LabelBuilder::new().label("About Page").build();
+    let page_stack = gtk::StackBuilder::new().build();
+
+    page_stack.add_titled(&setup_page, "Setup", "Setup");
+    page_stack.add_titled(&about_page, "About", "About");
+
+    let page_switcher = gtk::StackSwitcherBuilder::new()
+        .halign(gtk::Align::Center)
+        .stack(&page_stack)
+        .build();
+
+    let page_box = gtk::BoxBuilder::new()
+        .orientation(gtk::Orientation::Vertical)
+        .build();
+
+    page_box.add(&page_switcher);
+    page_box.add(&page_stack);
+
     let window = gtk::WindowBuilder::new().build();
+    window.add(&page_box);
     window.set_title("OTPTray Setup");
-    window.set_default_size(250, 250);
     window.set_position(gtk::WindowPosition::Center);
+    window.set_default_size(250, 250);
     window.show_all();
 }
 
