@@ -71,7 +71,7 @@ impl OtpEntry {
             base32::Alphabet::RFC4648 { padding: false },
             &self.secret_hash,
         )
-        .unwrap_or(vec![]); // TODO: Proper error handling.
+        .unwrap_or_default(); // TODO: Proper error handling.
         let otp = match &self.hash_fn[..] {
             "sha1" => totp_custom::<Sha1>(self.step, self.digit_count, &secret, unix_epoch),
             "sha256" => totp_custom::<Sha256>(self.step, self.digit_count, &secret, unix_epoch),
@@ -194,7 +194,7 @@ fn build_menu() -> gtk::Menu {
 
     let app_state = APP_STATE.load();
     let mut new_app_state = app_state.menu_reset();
-    if app_state.otp_entries.len() > 0 {
+    if !app_state.otp_entries.is_empty() {
         for entry in &app_state.otp_entries {
             let otp_value = entry.get_otp_value();
             let display = format!("{}: {}", otp_value.name, otp_value.otp);
