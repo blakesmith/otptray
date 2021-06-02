@@ -141,31 +141,51 @@ impl AppState {
     }
 }
 
+fn setup_page() -> gtk::Box {
+    let gtk_box = gtk::BoxBuilder::new()
+        .orientation(gtk::Orientation::Horizontal)
+        .halign(gtk::Align::Center)
+        .build();
+    let label = gtk::LabelBuilder::new().label("OTP Setup").build();
+    gtk_box.add(&label);
+    gtk_box
+}
+
+fn about_page() -> gtk::Box {
+    let gtk_box = gtk::BoxBuilder::new()
+        .orientation(gtk::Orientation::Horizontal)
+        .halign(gtk::Align::Center)
+        .build();
+    let label = gtk::LabelBuilder::new().label("About OTPTray").build();
+    gtk_box.add(&label);
+    gtk_box
+}
+
 fn setup_window() {
-    let setup_page = gtk::LabelBuilder::new().label("Setup Page").build();
-    let about_page = gtk::LabelBuilder::new().label("About Page").build();
     let page_stack = gtk::StackBuilder::new().build();
 
-    page_stack.add_titled(&setup_page, "Setup", "Setup");
-    page_stack.add_titled(&about_page, "About", "About");
+    page_stack.add_titled(&setup_page(), "Setup", "Setup");
+    page_stack.add_titled(&about_page(), "About", "About");
 
-    let page_switcher = gtk::StackSwitcherBuilder::new()
-        .halign(gtk::Align::Center)
-        .stack(&page_stack)
+    let page_switcher = gtk::StackSwitcherBuilder::new().stack(&page_stack).build();
+
+    let header_bar = gtk::HeaderBarBuilder::new()
+        .show_close_button(true)
+        .custom_title(&page_switcher)
         .build();
 
     let page_box = gtk::BoxBuilder::new()
         .orientation(gtk::Orientation::Vertical)
         .build();
 
-    page_box.add(&page_switcher);
     page_box.add(&page_stack);
 
-    let window = gtk::WindowBuilder::new().build();
+    let window = gtk::WindowBuilder::new().resizable(true).build();
     window.add(&page_box);
     window.set_title("OTPTray Setup");
+    window.set_titlebar(Some(&header_bar));
     window.set_position(gtk::WindowPosition::Center);
-    window.set_default_size(250, 250);
+    window.set_default_size(500, 500);
     window.show_all();
 }
 
