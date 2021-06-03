@@ -142,13 +142,28 @@ impl AppState {
 }
 
 fn setup_page() -> gtk::Box {
-    let gtk_box = gtk::BoxBuilder::new()
+    let page_box = gtk::BoxBuilder::new()
         .orientation(gtk::Orientation::Vertical)
         .build();
-    let label = gtk::LabelBuilder::new().label("OTP Setup").build();
-    gtk_box.add(&label);
-    gtk_box.add(&otp_configuration());
-    gtk_box
+    let button_box = gtk::BoxBuilder::new()
+        .orientation(gtk::Orientation::Horizontal)
+        .margin(5)
+        .build();
+    let add_button = gtk::ButtonBuilder::new().margin_end(3).label("Add").build();
+    let edit_button = gtk::ButtonBuilder::new()
+        .margin_end(3)
+        .label("Edit")
+        .build();
+    let remove_button = gtk::ButtonBuilder::new()
+        .margin_end(3)
+        .label("Remove")
+        .build();
+    button_box.add(&add_button);
+    button_box.add(&edit_button);
+    button_box.add(&remove_button);
+    page_box.add(&otp_configuration());
+    page_box.add(&button_box);
+    page_box
 }
 
 fn about_page() -> gtk::Box {
@@ -161,7 +176,7 @@ fn about_page() -> gtk::Box {
     gtk_box
 }
 
-fn otp_configuration() -> gtk::ScrolledWindow {
+fn otp_configuration() -> gtk::Frame {
     let row = gtk::ListBoxRowBuilder::new()
         .child(&gtk::LabelBuilder::new().label("Google").build())
         .build();
@@ -172,9 +187,14 @@ fn otp_configuration() -> gtk::ScrolledWindow {
     let viewport = gtk::ViewportBuilder::new().child(&otp_list).build();
     let window = gtk::ScrolledWindowBuilder::new()
         .hexpand(true)
+        .vexpand(true)
         .child(&viewport)
         .build();
-    window
+    gtk::FrameBuilder::new()
+        .label("One-Time Password Setup")
+        .margin(5)
+        .child(&window)
+        .build()
 }
 
 fn setup_window() {
@@ -201,7 +221,7 @@ fn setup_window() {
     window.set_title("OTPTray Setup");
     window.set_titlebar(Some(&header_bar));
     window.set_position(gtk::WindowPosition::Center);
-    window.set_default_size(500, 500);
+    window.set_default_size(250, 200);
     window.show_all();
 }
 
