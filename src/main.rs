@@ -56,6 +56,33 @@ struct OtpEntry {
     digit_count: u32,
 }
 
+#[derive(Clone, Debug)]
+enum EntryState {
+    Add,
+    Edit,
+}
+
+impl EntryState {
+    fn window_title(&self) -> &'static str {
+        match self {
+            EntryState::Add => "Add Entry",
+            EntryState::Edit => "Edit Entry",
+        }
+    }
+}
+
+impl Default for OtpEntry {
+    fn default() -> Self {
+        Self {
+            name: "".to_string(),
+            secret_hash: "".to_string(),
+            hash_fn: "sha1".to_string(),
+            step: 30,       // Google Authenticator defaults
+            digit_count: 6, // Google Authenticator defaults
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 struct OtpTrayConfig {
     entries: Vec<OtpEntry>,
@@ -141,6 +168,124 @@ impl AppState {
     }
 }
 
+fn otp_entry_window(otp_entry: &OtpEntry, entry_state: EntryState) {
+    let window = gtk::WindowBuilder::new().build();
+
+    let page_box = gtk::BoxBuilder::new()
+        .orientation(gtk::Orientation::Vertical)
+        .build();
+    let button_box = gtk::BoxBuilder::new()
+        .orientation(gtk::Orientation::Horizontal)
+        .margin(5)
+        .build();
+    let save_button = gtk::ButtonBuilder::new()
+        .margin_end(3)
+        .label("Save")
+        .build();
+    let cancel_button = gtk::ButtonBuilder::new()
+        .margin_end(3)
+        .label("Cancel")
+        .build();
+    let save_window = window.clone();
+    save_button.connect_clicked(move |_| {
+        save_window.close();
+    });
+    let cancel_window = window.clone();
+    cancel_button.connect_clicked(move |_| {
+        cancel_window.close();
+    });
+    button_box.add(&save_button);
+    button_box.add(&cancel_button);
+
+    let form_box = gtk::BoxBuilder::new()
+        .orientation(gtk::Orientation::Vertical)
+        .build();
+    let name_entry = gtk::EntryBuilder::new().build();
+    let name_box = gtk::BoxBuilder::new()
+        .orientation(gtk::Orientation::Vertical)
+        .margin_start(5)
+        .margin_end(5)
+        .margin_bottom(10)
+        .build();
+    name_box.add(&gtk::LabelBuilder::new().label("Name").build());
+    name_box.add(&name_entry);
+
+    let secret_entry = gtk::EntryBuilder::new().build();
+    let secret_box = gtk::BoxBuilder::new()
+        .orientation(gtk::Orientation::Vertical)
+        .margin_start(5)
+        .margin_end(5)
+        .margin_bottom(10)
+        .build();
+    secret_box.add(&gtk::LabelBuilder::new().label("Secret").build());
+    secret_box.add(&secret_entry);
+
+    let hash_fn_combo = gtk::ComboBoxTextBuilder::new().build();
+    hash_fn_combo.append(Some("sha1"), "sha1");
+    hash_fn_combo.append(Some("sha256"), "sha256");
+    hash_fn_combo.append(Some("sha512"), "sha512");
+    hash_fn_combo.set_active_id(Some("sha1"));
+    let hash_fn_box = gtk::BoxBuilder::new()
+        .orientation(gtk::Orientation::Vertical)
+        .margin_start(5)
+        .margin_end(5)
+        .margin_bottom(10)
+        .build();
+    hash_fn_box.add(&gtk::LabelBuilder::new().label("Hash Function").build());
+    hash_fn_box.add(&hash_fn_combo);
+
+    let step_entry = gtk::EntryBuilder::new()
+        .buffer(&gtk::EntryBuffer::new(Some(&otp_entry.step.to_string())))
+        .build();
+    let step_box = gtk::BoxBuilder::new()
+        .orientation(gtk::Orientation::Vertical)
+        .margin_start(5)
+        .margin_end(5)
+        .margin_bottom(10)
+        .build();
+    step_box.add(&gtk::LabelBuilder::new().label("Step in Seconds").build());
+    step_box.add(&step_entry);
+
+    let digit_entry = gtk::EntryBuilder::new()
+        .buffer(&gtk::EntryBuffer::new(Some(
+            &otp_entry.digit_count.to_string(),
+        )))
+        .build();
+    let digit_box = gtk::BoxBuilder::new()
+        .orientation(gtk::Orientation::Vertical)
+        .margin_start(5)
+        .margin_end(5)
+        .margin_bottom(10)
+        .build();
+    digit_box.add(
+        &gtk::LabelBuilder::new()
+            .label("Password Digit Length")
+            .build(),
+    );
+    digit_box.add(&digit_entry);
+
+    form_box.add(&name_box);
+    form_box.add(&secret_box);
+    form_box.add(&hash_fn_box);
+    form_box.add(&step_box);
+    form_box.add(&digit_box);
+
+    let form_frame = gtk::FrameBuilder::new()
+        .label(entry_state.window_title())
+        .child(&form_box)
+        .vexpand(true)
+        .margin(5)
+        .build();
+    page_box.add(&form_frame);
+    page_box.add(&button_box);
+
+    window.add(&page_box);
+    window.set_default_size(350, 350);
+    window.set_title(entry_state.window_title());
+    window.set_position(gtk::WindowPosition::Center);
+    window.show_all();
+}
+
 fn setup_page(app_state: &AppState) -> gtk::Box {
     let page_box = gtk::BoxBuilder::new()
         .orientation(gtk::Orientation::Vertical)
@@ -150,6 +295,9 @@ fn setup_page(app_state: &AppState) -> gtk::Box {
         .margin(5)
         .build();
     let add_button = gtk::ButtonBuilder::new().margin_end(3).label("Add").build();
+    add_button.connect_clicked(|_| {
+        otp_entry_window(&Default::default(), EntryState::Add);
+    });
     let edit_button = gtk::ButtonBuilder::new()
         .margin_end(3)
         .label("Edit")
