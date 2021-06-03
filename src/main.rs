@@ -141,7 +141,7 @@ impl AppState {
     }
 }
 
-fn setup_page() -> gtk::Box {
+fn setup_page(app_state: &AppState) -> gtk::Box {
     let page_box = gtk::BoxBuilder::new()
         .orientation(gtk::Orientation::Vertical)
         .build();
@@ -161,7 +161,7 @@ fn setup_page() -> gtk::Box {
     button_box.add(&add_button);
     button_box.add(&edit_button);
     button_box.add(&remove_button);
-    page_box.add(&otp_configuration());
+    page_box.add(&otp_configuration(&app_state.otp_entries));
     page_box.add(&button_box);
     page_box
 }
@@ -176,14 +176,16 @@ fn about_page() -> gtk::Box {
     gtk_box
 }
 
-fn otp_configuration() -> gtk::Frame {
-    let row = gtk::ListBoxRowBuilder::new()
-        .child(&gtk::LabelBuilder::new().label("Google").build())
-        .build();
+fn otp_configuration(otp_entries: &[OtpEntry]) -> gtk::Frame {
     let otp_list = gtk::ListBoxBuilder::new()
         .selection_mode(gtk::SelectionMode::Single)
         .build();
-    otp_list.add(&row);
+    for entry in otp_entries {
+        let row = gtk::ListBoxRowBuilder::new()
+            .child(&gtk::LabelBuilder::new().label(&entry.name).build())
+            .build();
+        otp_list.add(&row);
+    }
     let viewport = gtk::ViewportBuilder::new().child(&otp_list).build();
     let window = gtk::ScrolledWindowBuilder::new()
         .hexpand(true)
@@ -199,8 +201,9 @@ fn otp_configuration() -> gtk::Frame {
 
 fn setup_window() {
     let page_stack = gtk::StackBuilder::new().build();
+    let app_state = APP_STATE.load();
 
-    page_stack.add_titled(&setup_page(), "Setup", "Setup");
+    page_stack.add_titled(&setup_page(&app_state), "Setup", "Setup");
     page_stack.add_titled(&about_page(), "About", "About");
 
     let page_switcher = gtk::StackSwitcherBuilder::new().stack(&page_stack).build();
