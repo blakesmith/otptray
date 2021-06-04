@@ -129,14 +129,14 @@ impl OtpEntry {
 #[derive(Clone, Copy, Debug)]
 enum EntryAction {
     Add,
-    Edit,
+    Edit(usize),
 }
 
 impl EntryAction {
     fn window_title(&self) -> &'static str {
         match self {
             EntryAction::Add => "Add Entry",
-            EntryAction::Edit => "Edit Entry",
+            EntryAction::Edit(_) => "Edit Entry",
         }
     }
 }
@@ -231,13 +231,16 @@ impl AppState {
     }
 
     fn save_entry(&self, otp_entry: OtpEntry, entry_action: EntryAction) -> AppState {
+        let mut entries = self.otp_entries.clone();
         let new_otp_entries = match entry_action {
             EntryAction::Add => {
-                let mut entries = self.otp_entries.clone();
                 entries.push(otp_entry);
                 entries
             }
-            EntryAction::Edit => self.otp_entries.clone(), // TODO: Base the edit off the combo box position?
+            EntryAction::Edit(index) => {
+                entries[index] = otp_entry;
+                entries
+            }
         };
 
         Self {
@@ -264,7 +267,9 @@ fn otp_entry_window(otp_entry: &OtpEntry, entry_action: EntryAction) {
         .orientation(gtk::Orientation::Vertical)
         .build();
 
-    let name_entry = gtk::EntryBuilder::new().build();
+    let name_entry = gtk::EntryBuilder::new()
+        .buffer(&gtk::EntryBuffer::new(Some(&otp_entry.name)))
+        .build();
     let name_box = gtk::BoxBuilder::new()
         .orientation(gtk::Orientation::Vertical)
         .margin_start(5)
@@ -274,7 +279,9 @@ fn otp_entry_window(otp_entry: &OtpEntry, entry_action: EntryAction) {
     name_box.add(&gtk::LabelBuilder::new().label("Name").build());
     name_box.add(&name_entry);
 
-    let secret_entry = gtk::EntryBuilder::new().build();
+    let secret_entry = gtk::EntryBuilder::new()
+        .buffer(&gtk::EntryBuffer::new(Some(&otp_entry.secret_hash)))
+        .build();
     let secret_box = gtk::BoxBuilder::new()
         .orientation(gtk::Orientation::Vertical)
         .margin_start(5)
@@ -393,6 +400,7 @@ fn setup_page(app_state: &AppState) -> gtk::Box {
     let page_box = gtk::BoxBuilder::new()
         .orientation(gtk::Orientation::Vertical)
         .build();
+    let (frame, otp_list) = otp_configuration(&app_state.otp_entries);
     let button_box = gtk::BoxBuilder::new()
         .orientation(gtk::Orientation::Horizontal)
         .margin(5)
@@ -405,6 +413,15 @@ fn setup_page(app_state: &AppState) -> gtk::Box {
         .margin_end(3)
         .label("Edit")
         .build();
+    let entries = app_state.otp_entries.clone();
+    edit_button.connect_clicked(move |_| {
+        if let Some(selected_row) = otp_list
+            .get_selected_row()
+            .map(|row| row.get_index() as usize)
+        {
+            otp_entry_window(&entries[selected_row], EntryAction::Edit(selected_row));
+        }
+    });
     let remove_button = gtk::ButtonBuilder::new()
         .margin_end(3)
         .label("Remove")
@@ -412,7 +429,7 @@ fn setup_page(app_state: &AppState) -> gtk::Box {
     button_box.add(&add_button);
     button_box.add(&edit_button);
     button_box.add(&remove_button);
-    page_box.add(&otp_configuration(&app_state.otp_entries));
+    page_box.add(&frame);
     page_box.add(&button_box);
     page_box
 }
@@ -427,7 +444,7 @@ fn about_page() -> gtk::Box {
     gtk_box
 }
 
-fn otp_configuration(otp_entries: &[OtpEntry]) -> gtk::Frame {
+fn otp_configuration(otp_entries: &[OtpEntry]) -> (gtk::Frame, gtk::ListBox) {
     let otp_list = gtk::ListBoxBuilder::new()
         .selection_mode(gtk::SelectionMode::Single)
         .build();
@@ -443,11 +460,12 @@ fn otp_configuration(otp_entries: &[OtpEntry]) -> gtk::Frame {
         .vexpand(true)
         .child(&viewport)
         .build();
-    gtk::FrameBuilder::new()
+    let frame = gtk::FrameBuilder::new()
         .label("One-Time Password Setup")
         .margin(5)
         .child(&window)
-        .build()
+        .build();
+    (frame, otp_list)
 }
 
 fn setup_window() {
