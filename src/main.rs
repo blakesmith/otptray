@@ -126,17 +126,17 @@ impl OtpEntry {
     }
 }
 
-#[derive(Clone, Debug)]
-enum EntryState {
+#[derive(Clone, Copy, Debug)]
+enum EntryAction {
     Add,
     Edit,
 }
 
-impl EntryState {
+impl EntryAction {
     fn window_title(&self) -> &'static str {
         match self {
-            EntryState::Add => "Add Entry",
-            EntryState::Edit => "Edit Entry",
+            EntryAction::Add => "Add Entry",
+            EntryAction::Edit => "Edit Entry",
         }
     }
 }
@@ -146,9 +146,9 @@ impl Default for OtpEntry {
         Self {
             name: "".to_string(),
             secret_hash: "".to_string(),
-            hash_fn: "sha1".to_string(),
-            step: 30,       // Google Authenticator defaults
-            digit_count: 6, // Google Authenticator defaults
+            hash_fn: "sha1".to_string(), // Google Authenticator defaults
+            step: 30,                    // Google Authenticator defaults
+            digit_count: 6,              // Google Authenticator defaults
         }
     }
 }
@@ -230,6 +230,22 @@ impl AppState {
         self.otp_codes.get(&key)
     }
 
+    fn save_entry(&self, otp_entry: OtpEntry, entry_action: EntryAction) -> AppState {
+        let new_otp_entries = match entry_action {
+            EntryAction::Add => {
+                let mut entries = self.otp_entries.clone();
+                entries.push(otp_entry);
+                entries
+            }
+            EntryAction::Edit => self.otp_entries.clone(), // TODO: Base the edit off the combo box position?
+        };
+
+        Self {
+            otp_entries: new_otp_entries,
+            ..Default::default()
+        }
+    }
+
     fn menu_reset(&self) -> Self {
         Self {
             otp_entries: self.otp_entries.clone(),
@@ -238,7 +254,7 @@ impl AppState {
     }
 }
 
-fn otp_entry_window(otp_entry: &OtpEntry, entry_state: EntryState) {
+fn otp_entry_window(otp_entry: &OtpEntry, entry_action: EntryAction) {
     let window = gtk::WindowBuilder::new().build();
 
     let page_box = gtk::BoxBuilder::new()
@@ -319,7 +335,7 @@ fn otp_entry_window(otp_entry: &OtpEntry, entry_state: EntryState) {
     form_box.add(&digit_box);
 
     let form_frame = gtk::FrameBuilder::new()
-        .label(entry_state.window_title())
+        .label(entry_action.window_title())
         .child(&form_box)
         .vexpand(true)
         .margin(5)
@@ -348,8 +364,11 @@ fn otp_entry_window(otp_entry: &OtpEntry, entry_state: EntryState) {
             digit_entry.get_buffer().get_text(),
         );
         match new_otp_entry {
-            Ok(entry) => println!("Saving: {:?}", entry),
-            Err(err) => println!("Invalid entry input: {:?}", err),
+            Ok(entry) => {
+                log::info!("Saving: {:?}", entry);
+                APP_STATE.store(APP_STATE.load().save_entry(entry, entry_action));
+            }
+            Err(err) => log::info!("Invalid entry input: {:?}", err), // TODO: Pop up some error window
         }
         save_window.close();
     });
@@ -365,7 +384,7 @@ fn otp_entry_window(otp_entry: &OtpEntry, entry_state: EntryState) {
 
     window.add(&page_box);
     window.set_default_size(350, 350);
-    window.set_title(entry_state.window_title());
+    window.set_title(entry_action.window_title());
     window.set_position(gtk::WindowPosition::Center);
     window.show_all();
 }
@@ -380,7 +399,7 @@ fn setup_page(app_state: &AppState) -> gtk::Box {
         .build();
     let add_button = gtk::ButtonBuilder::new().margin_end(3).label("Add").build();
     add_button.connect_clicked(|_| {
-        otp_entry_window(&Default::default(), EntryState::Add);
+        otp_entry_window(&Default::default(), EntryAction::Add);
     });
     let edit_button = gtk::ButtonBuilder::new()
         .margin_end(3)
