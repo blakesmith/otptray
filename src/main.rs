@@ -23,6 +23,32 @@ lazy_static! {
         Arc::new(AtomicImmut::new(Default::default()));
 }
 
+static VALID_HASH_FNS: &'static [&str] = &["sha1", "sha256", "sha512"];
+
+#[derive(Debug, Clone)]
+enum ValidationError {
+    Empty {
+        field: &'static str,
+    },
+    IntegerFormat(std::num::ParseIntError),
+    Length {
+        field: &'static str,
+        upper_bound: usize,
+        length: usize,
+    },
+    InvalidSelection {
+        field: &'static str,
+        candidate: String,
+        valid_selections: &'static [&'static str],
+    },
+}
+
+impl From<std::num::ParseIntError> for ValidationError {
+    fn from(err: std::num::ParseIntError) -> Self {
+        ValidationError::IntegerFormat(err)
+    }
+}
+
 #[derive(Debug)]
 enum Error {
     NoUserConfigDir,
@@ -54,6 +80,50 @@ struct OtpEntry {
     secret_hash: String,
     hash_fn: String,
     digit_count: u32,
+}
+
+impl OtpEntry {
+    fn input_validate(
+        name: String,
+        step: String,
+        secret_hash: String,
+        hash_fn: String,
+        digit_count: String,
+    ) -> Result<Self, ValidationError> {
+        if name.is_empty() {
+            return Err(ValidationError::Empty { field: "name" });
+        }
+        if name.len() > 255 {
+            return Err(ValidationError::Length {
+                field: "name",
+                upper_bound: 255,
+                length: name.len(),
+            });
+        }
+        if secret_hash.is_empty() {
+            return Err(ValidationError::Empty { field: "secret" });
+        }
+        if VALID_HASH_FNS
+            .iter()
+            .find(|valid_hash| **valid_hash == hash_fn)
+            .is_none()
+        {
+            return Err(ValidationError::InvalidSelection {
+                field: "hash function",
+                candidate: hash_fn,
+                valid_selections: VALID_HASH_FNS,
+            });
+        }
+        let step_parsed = step.parse::<u64>()?;
+        let digit_count_parsed = digit_count.parse::<u8>()?;
+        Ok(OtpEntry {
+            name,
+            step: step_parsed,
+            secret_hash,
+            hash_fn,
+            digit_count: digit_count_parsed as u32,
+        })
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -174,32 +244,10 @@ fn otp_entry_window(otp_entry: &OtpEntry, entry_state: EntryState) {
     let page_box = gtk::BoxBuilder::new()
         .orientation(gtk::Orientation::Vertical)
         .build();
-    let button_box = gtk::BoxBuilder::new()
-        .orientation(gtk::Orientation::Horizontal)
-        .margin(5)
-        .build();
-    let save_button = gtk::ButtonBuilder::new()
-        .margin_end(3)
-        .label("Save")
-        .build();
-    let cancel_button = gtk::ButtonBuilder::new()
-        .margin_end(3)
-        .label("Cancel")
-        .build();
-    let save_window = window.clone();
-    save_button.connect_clicked(move |_| {
-        save_window.close();
-    });
-    let cancel_window = window.clone();
-    cancel_button.connect_clicked(move |_| {
-        cancel_window.close();
-    });
-    button_box.add(&save_button);
-    button_box.add(&cancel_button);
-
     let form_box = gtk::BoxBuilder::new()
         .orientation(gtk::Orientation::Vertical)
         .build();
+
     let name_entry = gtk::EntryBuilder::new().build();
     let name_box = gtk::BoxBuilder::new()
         .orientation(gtk::Orientation::Vertical)
@@ -276,6 +324,42 @@ fn otp_entry_window(otp_entry: &OtpEntry, entry_state: EntryState) {
         .vexpand(true)
         .margin(5)
         .build();
+
+    let button_box = gtk::BoxBuilder::new()
+        .orientation(gtk::Orientation::Horizontal)
+        .margin(5)
+        .build();
+    let save_button = gtk::ButtonBuilder::new()
+        .margin_end(3)
+        .label("Save")
+        .build();
+    let cancel_button = gtk::ButtonBuilder::new()
+        .margin_end(3)
+        .label("Cancel")
+        .build();
+    let save_window = window.clone();
+
+    save_button.connect_clicked(move |_| {
+        let new_otp_entry = OtpEntry::input_validate(
+            name_entry.get_buffer().get_text(),
+            step_entry.get_buffer().get_text(),
+            secret_entry.get_buffer().get_text(),
+            hash_fn_combo.get_active_id().unwrap().as_str().to_string(), // Our combo box should always have a value
+            digit_entry.get_buffer().get_text(),
+        );
+        match new_otp_entry {
+            Ok(entry) => println!("Saving: {:?}", entry),
+            Err(err) => println!("Invalid entry input: {:?}", err),
+        }
+        save_window.close();
+    });
+    let cancel_window = window.clone();
+    cancel_button.connect_clicked(move |_| {
+        cancel_window.close();
+    });
+    button_box.add(&save_button);
+    button_box.add(&cancel_button);
+
     page_box.add(&form_frame);
     page_box.add(&button_box);
 
