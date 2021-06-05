@@ -25,6 +25,10 @@ lazy_static! {
 
 static VALID_HASH_FNS: &'static [&str] = &["sha1", "sha256", "sha512"];
 
+enum UiEvent {
+    Quit,
+}
+
 #[derive(Debug, Clone)]
 enum ValidationError {
     Empty {
@@ -516,7 +520,7 @@ fn setup_window() {
     window.show_all();
 }
 
-fn build_menu() -> gtk::Menu {
+fn build_menu(tx: glib::Sender<UiEvent>) -> gtk::Menu {
     let menu = gtk::Menu::new();
 
     let app_state = APP_STATE.load();
@@ -550,8 +554,9 @@ fn build_menu() -> gtk::Menu {
         setup_window();
     });
     let quit_item = gtk::MenuItem::with_label("Quit");
-    quit_item.connect_activate(|_| {
-        gtk::main_quit();
+    let quit_tx = tx.clone();
+    quit_item.connect_activate(move |_| {
+        quit_tx.send(UiEvent::Quit).unwrap();
     });
     menu.append(&setup_item);
     menu.append(&quit_item);
@@ -560,14 +565,17 @@ fn build_menu() -> gtk::Menu {
     menu
 }
 
-fn periodic_otp_task(indicator: &mut AppIndicator) {
-    let mut menu = build_menu();
+fn periodic_otp_task(indicator: &mut AppIndicator, tx: glib::Sender<UiEvent>) {
+    let mut menu = build_menu(tx);
     indicator.set_menu(&mut menu);
     menu.show_all();
 }
 
 fn main() {
     gtk::init().unwrap();
+
+    let (tx, rx): (glib::Sender<UiEvent>, glib::Receiver<UiEvent>) =
+        glib::MainContext::channel(glib::PRIORITY_DEFAULT);
 
     let app_state = AppState::load_from_config().expect("Cannot load OTPTrap config!");
     APP_STATE.store(app_state);
@@ -578,10 +586,21 @@ fn main() {
     indicator.set_icon_theme_path(icon_path.to_str().unwrap());
     indicator.set_icon_full("rust-logo-64x64-white", "icon");
 
-    periodic_otp_task(&mut indicator);
+    periodic_otp_task(&mut indicator, tx.clone());
     glib::timeout_add_seconds_local(10, move || {
-        periodic_otp_task(&mut indicator);
+        periodic_otp_task(&mut indicator, tx.clone());
         Continue(true)
     });
+
+    rx.attach(None, move |event| {
+        match event {
+            UiEvent::Quit => {
+                gtk::main_quit();
+            }
+        };
+
+        Continue(true)
+    });
+
     gtk::main();
 }
