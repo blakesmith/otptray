@@ -624,10 +624,12 @@ fn main() {
             UiEvent::SaveEntry(entry, entry_action) => {
                 log::info!("Saving: {:?}", entry);
                 APP_STATE.store(APP_STATE.load().save_entry(entry, entry_action));
+                let _ = event_tx.send(UiEvent::TotpRefresh);
             }
             UiEvent::RemoveEntry(selected_row) => {
                 log::info!("Removing entry at index: {}", selected_row);
                 APP_STATE.store(APP_STATE.load().remove_entry_index(selected_row));
+                let _ = event_tx.send(UiEvent::TotpRefresh);
             }
             UiEvent::Quit => {
                 gtk::main_quit();
