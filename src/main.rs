@@ -3,13 +3,14 @@ extern crate lazy_static;
 
 use atomic_immut::AtomicImmut;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use simple_logger::SimpleLogger;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 use std::env;
+use std::fs::OpenOptions;
 use std::hash::{Hash, Hasher};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -84,7 +85,7 @@ struct OtpValue {
     otp: String,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 struct OtpEntry {
     name: String,
     step: u64,
@@ -164,7 +165,7 @@ impl Default for OtpEntry {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct OtpTrayConfig {
     entries: Vec<OtpEntry>,
 }
@@ -209,12 +210,13 @@ impl Default for AppState {
 }
 
 impl AppState {
-    fn load_from_config() -> Result<AppState, Error> {
-        use std::fs::OpenOptions;
-
+    fn config_path() -> Result<PathBuf, Error> {
         let config_dir = dirs::config_dir().ok_or(Error::NoUserConfigDir)?;
-        let config_file_path = config_dir.join("otptray.yaml");
-        match OpenOptions::new().read(true).open(config_file_path) {
+        Ok(config_dir.join("otptray.yaml"))
+    }
+
+    fn load_from_config() -> Result<AppState, Error> {
+        match OpenOptions::new().read(true).open(Self::config_path()?) {
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(Default::default()),
             Err(err) => Err(err.into()),
             Ok(file) => {
@@ -225,6 +227,22 @@ impl AppState {
                 })
             }
         }
+    }
+
+    fn save_to_config(&self) -> Result<(), Error> {
+        OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .read(true)
+            .open(Self::config_path()?)
+            .map_err(|err| err.into())
+            .and_then(|file| {
+                let config = OtpTrayConfig {
+                    entries: self.otp_entries.clone(),
+                };
+                serde_yaml::to_writer(&file, &config).map_err(|err| err.into())
+            })
     }
 
     fn add_otp_value<T: Hash>(&mut self, entry: &T, otp_code: String) -> u64 {
@@ -663,6 +681,9 @@ fn main() {
                 if let Some(ref mut otp_list) = otp_setup_list {
                     build_otp_list(otp_list, &app_state.otp_entries);
                 }
+                if let Err(err) = app_state.save_to_config() {
+                    log::error!("Failed to save configuration file: {:?}", err);
+                }
                 APP_STATE.store(app_state);
                 let _ = event_tx.send(UiEvent::TotpRefresh);
             }
@@ -671,6 +692,9 @@ fn main() {
                 let app_state = APP_STATE.load().remove_entry_index(selected_row);
                 if let Some(ref mut otp_list) = otp_setup_list {
                     build_otp_list(otp_list, &app_state.otp_entries);
+                }
+                if let Err(err) = app_state.save_to_config() {
+                    log::error!("Failed to save configuration file: {:?}", err);
                 }
                 APP_STATE.store(app_state);
                 let _ = event_tx.send(UiEvent::TotpRefresh);
