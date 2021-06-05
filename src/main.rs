@@ -249,6 +249,15 @@ impl AppState {
         }
     }
 
+    fn delete_entry_index(&self, index: usize) -> AppState {
+        let mut new_otp_entries = self.otp_entries.clone();
+        new_otp_entries.remove(index);
+        Self {
+            otp_entries: new_otp_entries,
+            ..Default::default()
+        }
+    }
+
     fn menu_reset(&self) -> Self {
         Self {
             otp_entries: self.otp_entries.clone(),
@@ -414,8 +423,9 @@ fn setup_page(app_state: &AppState) -> gtk::Box {
         .label("Edit")
         .build();
     let entries = app_state.otp_entries.clone();
+    let edit_otp_list = otp_list.clone();
     edit_button.connect_clicked(move |_| {
-        if let Some(selected_row) = otp_list
+        if let Some(selected_row) = edit_otp_list
             .get_selected_row()
             .map(|row| row.get_index() as usize)
         {
@@ -426,6 +436,15 @@ fn setup_page(app_state: &AppState) -> gtk::Box {
         .margin_end(3)
         .label("Remove")
         .build();
+    let delete_otp_list = otp_list.clone();
+    remove_button.connect_clicked(move |_| {
+        if let Some(selected_row) = delete_otp_list
+            .get_selected_row()
+            .map(|row| row.get_index() as usize)
+        {
+            APP_STATE.store(APP_STATE.load().delete_entry_index(selected_row));
+        }
+    });
     button_box.add(&add_button);
     button_box.add(&edit_button);
     button_box.add(&remove_button);
