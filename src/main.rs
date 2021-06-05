@@ -29,6 +29,7 @@ enum UiEvent {
     OpenSetup,
     OpenEntry(EntryAction),
     SaveEntry(OtpEntry, EntryAction),
+    RemoveEntry(usize),
     Quit,
 }
 
@@ -256,7 +257,7 @@ impl AppState {
         }
     }
 
-    fn delete_entry_index(&self, index: usize) -> AppState {
+    fn remove_entry_index(&self, index: usize) -> AppState {
         let mut new_otp_entries = self.otp_entries.clone();
         new_otp_entries.remove(index);
         Self {
@@ -446,12 +447,13 @@ fn setup_page(app_state: &AppState, tx: glib::Sender<UiEvent>) -> gtk::Box {
         .label("Remove")
         .build();
     let delete_otp_list = otp_list.clone();
+    let remove_tx = tx.clone();
     remove_button.connect_clicked(move |_| {
         if let Some(selected_row) = delete_otp_list
             .get_selected_row()
             .map(|row| row.get_index() as usize)
         {
-            APP_STATE.store(APP_STATE.load().delete_entry_index(selected_row));
+            let _ = remove_tx.send(UiEvent::RemoveEntry(selected_row));
         }
     });
     button_box.add(&add_button);
@@ -614,6 +616,10 @@ fn main() {
             UiEvent::SaveEntry(entry, entry_action) => {
                 log::info!("Saving: {:?}", entry);
                 APP_STATE.store(APP_STATE.load().save_entry(entry, entry_action));
+            }
+            UiEvent::RemoveEntry(selected_row) => {
+                log::info!("Removing entry at index: {}", selected_row);
+                APP_STATE.store(APP_STATE.load().remove_entry_index(selected_row));
             }
             UiEvent::Quit => {
                 gtk::main_quit();
