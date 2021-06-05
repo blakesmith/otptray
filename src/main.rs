@@ -26,6 +26,9 @@ lazy_static! {
 static VALID_HASH_FNS: &'static [&str] = &["sha1", "sha256", "sha512"];
 
 enum UiEvent {
+    OpenSetup,
+    OpenEntry(EntryAction),
+    SaveEntry(OtpEntry, EntryAction),
     Quit,
 }
 
@@ -270,7 +273,7 @@ impl AppState {
     }
 }
 
-fn otp_entry_window(otp_entry: &OtpEntry, entry_action: EntryAction) {
+fn otp_entry_window(otp_entry: &OtpEntry, entry_action: EntryAction, tx: glib::Sender<UiEvent>) {
     let window = gtk::WindowBuilder::new().build();
 
     let page_box = gtk::BoxBuilder::new()
@@ -385,8 +388,7 @@ fn otp_entry_window(otp_entry: &OtpEntry, entry_action: EntryAction) {
         );
         match new_otp_entry {
             Ok(entry) => {
-                log::info!("Saving: {:?}", entry);
-                APP_STATE.store(APP_STATE.load().save_entry(entry, entry_action));
+                let _ = tx.send(UiEvent::SaveEntry(entry, entry_action));
             }
             Err(err) => log::info!("Invalid entry input: {:?}", err), // TODO: Pop up some error window
         }
@@ -409,7 +411,7 @@ fn otp_entry_window(otp_entry: &OtpEntry, entry_action: EntryAction) {
     window.show_all();
 }
 
-fn setup_page(app_state: &AppState) -> gtk::Box {
+fn setup_page(app_state: &AppState, tx: glib::Sender<UiEvent>) -> gtk::Box {
     let page_box = gtk::BoxBuilder::new()
         .orientation(gtk::Orientation::Vertical)
         .build();
@@ -419,21 +421,24 @@ fn setup_page(app_state: &AppState) -> gtk::Box {
         .margin(5)
         .build();
     let add_button = gtk::ButtonBuilder::new().margin_end(3).label("Add").build();
-    add_button.connect_clicked(|_| {
-        otp_entry_window(&Default::default(), EntryAction::Add);
+
+    let add_tx = tx.clone();
+    add_button.connect_clicked(move |_| {
+        let _ = add_tx.send(UiEvent::OpenEntry(EntryAction::Add));
     });
     let edit_button = gtk::ButtonBuilder::new()
         .margin_end(3)
         .label("Edit")
         .build();
-    let entries = app_state.otp_entries.clone();
+
     let edit_otp_list = otp_list.clone();
+    let edit_tx = tx.clone();
     edit_button.connect_clicked(move |_| {
         if let Some(selected_row) = edit_otp_list
             .get_selected_row()
             .map(|row| row.get_index() as usize)
         {
-            otp_entry_window(&entries[selected_row], EntryAction::Edit(selected_row));
+            let _ = edit_tx.send(UiEvent::OpenEntry(EntryAction::Edit(selected_row)));
         }
     });
     let remove_button = gtk::ButtonBuilder::new()
@@ -491,11 +496,10 @@ fn otp_configuration(otp_entries: &[OtpEntry]) -> (gtk::Frame, gtk::ListBox) {
     (frame, otp_list)
 }
 
-fn setup_window() {
+fn setup_window(app_state: Arc<AppState>, tx: glib::Sender<UiEvent>) {
     let page_stack = gtk::StackBuilder::new().build();
-    let app_state = APP_STATE.load();
 
-    page_stack.add_titled(&setup_page(&app_state), "Setup", "Setup");
+    page_stack.add_titled(&setup_page(&app_state, tx), "Setup", "Setup");
     page_stack.add_titled(&about_page(), "About", "About");
 
     let page_switcher = gtk::StackSwitcherBuilder::new().stack(&page_stack).build();
@@ -550,13 +554,14 @@ fn build_menu(tx: glib::Sender<UiEvent>) -> gtk::Menu {
     menu.append(&gtk::SeparatorMenuItem::new());
 
     let setup_item = gtk::MenuItem::with_label("Setup");
-    setup_item.connect_activate(|_| {
-        setup_window();
+    let setup_tx = tx.clone();
+    setup_item.connect_activate(move |_| {
+        let _ = setup_tx.send(UiEvent::OpenSetup);
     });
     let quit_item = gtk::MenuItem::with_label("Quit");
     let quit_tx = tx.clone();
     quit_item.connect_activate(move |_| {
-        quit_tx.send(UiEvent::Quit).unwrap();
+        let _ = quit_tx.send(UiEvent::Quit);
     });
     menu.append(&setup_item);
     menu.append(&quit_item);
@@ -587,13 +592,29 @@ fn main() {
     indicator.set_icon_full("rust-logo-64x64-white", "icon");
 
     periodic_otp_task(&mut indicator, tx.clone());
+    let periodic_tx = tx.clone();
     glib::timeout_add_seconds_local(10, move || {
-        periodic_otp_task(&mut indicator, tx.clone());
+        periodic_otp_task(&mut indicator, periodic_tx.clone());
         Continue(true)
     });
 
     rx.attach(None, move |event| {
         match event {
+            UiEvent::OpenSetup => {
+                setup_window(APP_STATE.load(), tx.clone());
+            }
+            UiEvent::OpenEntry(entry_action) => match entry_action {
+                EntryAction::Add => otp_entry_window(&Default::default(), entry_action, tx.clone()),
+                EntryAction::Edit(selected_row) => otp_entry_window(
+                    &APP_STATE.load().otp_entries[selected_row],
+                    entry_action,
+                    tx.clone(),
+                ),
+            },
+            UiEvent::SaveEntry(entry, entry_action) => {
+                log::info!("Saving: {:?}", entry);
+                APP_STATE.store(APP_STATE.load().save_entry(entry, entry_action));
+            }
             UiEvent::Quit => {
                 gtk::main_quit();
             }
