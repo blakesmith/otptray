@@ -30,6 +30,7 @@ enum UiEvent {
     OpenEntry(EntryAction),
     SaveEntry(OtpEntry, EntryAction),
     RemoveEntry(usize),
+    CopyToClipboard(String),
     Quit,
 }
 
@@ -536,12 +537,11 @@ fn build_menu(tx: glib::Sender<UiEvent>) -> gtk::Menu {
             let otp_value = entry.get_otp_value();
             let display = format!("{}: {}", otp_value.name, otp_value.otp);
             let otp_item = gtk::MenuItem::with_label(&display);
-            otp_item.connect_activate(|menu_item| {
-                let atom = gdk::Atom::intern("CLIPBOARD");
-                let clipboard = gtk::Clipboard::get(&atom);
+            let copy_tx = tx.clone();
+            otp_item.connect_activate(move |menu_item| {
                 let app_state = APP_STATE.load();
                 if let Some(code) = app_state.get_otp_value(&menu_item) {
-                    clipboard.set_text(code);
+                    let _ = copy_tx.send(UiEvent::CopyToClipboard(code.to_string()));
                 }
             });
             menu.append(&otp_item);
@@ -602,6 +602,11 @@ fn main() {
 
     rx.attach(None, move |event| {
         match event {
+            UiEvent::CopyToClipboard(code) => {
+                let atom = gdk::Atom::intern("CLIPBOARD");
+                let clipboard = gtk::Clipboard::get(&atom);
+                clipboard.set_text(&code);
+            }
             UiEvent::OpenSetup => {
                 setup_window(APP_STATE.load(), tx.clone());
             }
