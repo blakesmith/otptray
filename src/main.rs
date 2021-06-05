@@ -27,6 +27,7 @@ static VALID_HASH_FNS: &'static [&str] = &["sha1", "sha256", "sha512"];
 
 #[derive(Debug)]
 enum UiEvent {
+    TotpRefresh,
     OpenSetup,
     OpenEntry(EntryAction),
     SaveEntry(OtpEntry, EntryAction),
@@ -566,14 +567,6 @@ fn build_menu(app_state: Arc<AppState>, tx: glib::Sender<UiEvent>) -> (AppState,
     (new_app_state, menu)
 }
 
-fn periodic_otp_task(indicator: &mut AppIndicator, tx: glib::Sender<UiEvent>) {
-    let app_state = APP_STATE.load();
-    let (new_app_state, mut menu) = build_menu(app_state, tx);
-    APP_STATE.store(new_app_state);
-    indicator.set_menu(&mut menu);
-    menu.show_all();
-}
-
 fn main() {
     SimpleLogger::new().init().unwrap();
     gtk::init().unwrap();
@@ -590,16 +583,23 @@ fn main() {
     indicator.set_icon_theme_path(icon_path.to_str().unwrap());
     indicator.set_icon_full("rust-logo-64x64-white", "icon");
 
-    periodic_otp_task(&mut indicator, tx.clone());
     let periodic_tx = tx.clone();
     glib::timeout_add_seconds_local(10, move || {
-        periodic_otp_task(&mut indicator, periodic_tx.clone());
+        let _ = periodic_tx.send(UiEvent::TotpRefresh);
         Continue(true)
     });
 
+    let event_tx = tx.clone();
     rx.attach(None, move |event| {
         log::debug!("Got UI event: {:?}", event);
         match event {
+            UiEvent::TotpRefresh => {
+                let app_state = APP_STATE.load();
+                let (new_app_state, mut menu) = build_menu(app_state, event_tx.clone());
+                APP_STATE.store(new_app_state);
+                indicator.set_menu(&mut menu);
+                menu.show_all();
+            }
             UiEvent::CopyToClipboard(menu_item_id) => {
                 let app_state = APP_STATE.load();
                 if let Some(code) = app_state.get_otp_value_by_id(menu_item_id) {
@@ -609,14 +609,16 @@ fn main() {
                 }
             }
             UiEvent::OpenSetup => {
-                setup_window(APP_STATE.load(), tx.clone());
+                setup_window(APP_STATE.load(), event_tx.clone());
             }
             UiEvent::OpenEntry(entry_action) => match entry_action {
-                EntryAction::Add => otp_entry_window(&Default::default(), entry_action, tx.clone()),
+                EntryAction::Add => {
+                    otp_entry_window(&Default::default(), entry_action, event_tx.clone())
+                }
                 EntryAction::Edit(selected_row) => otp_entry_window(
                     &APP_STATE.load().otp_entries[selected_row],
                     entry_action,
-                    tx.clone(),
+                    event_tx.clone(),
                 ),
             },
             UiEvent::SaveEntry(entry, entry_action) => {
@@ -635,5 +637,6 @@ fn main() {
         Continue(true)
     });
 
+    let _ = tx.send(UiEvent::TotpRefresh);
     gtk::main();
 }
