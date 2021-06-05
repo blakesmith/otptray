@@ -406,6 +406,16 @@ fn otp_entry_window(otp_entry: &OtpEntry, entry_action: EntryAction, tx: glib::S
     page_box.add(&form_frame);
     page_box.add(&button_box);
 
+    window.connect_key_press_event(move |_, key_event| {
+        match key_event.get_keyval().name() {
+            Some(key_name) if key_name == "Return" => {
+                save_button.clicked();
+            }
+            _ => {}
+        }
+
+        Inhibit(false)
+    });
     window.add(&page_box);
     window.set_default_size(350, 350);
     window.set_title(entry_action.window_title());
