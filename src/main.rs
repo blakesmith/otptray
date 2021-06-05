@@ -411,6 +411,9 @@ fn otp_entry_window(otp_entry: &OtpEntry, entry_action: EntryAction, tx: glib::S
             Some(key_name) if key_name == "Return" => {
                 save_button.clicked();
             }
+            Some(key_name) if key_name == "Escape" => {
+                cancel_button.clicked();
+            }
             _ => {}
         }
 
@@ -538,6 +541,16 @@ fn setup_window(app_state: Arc<AppState>, tx: glib::Sender<UiEvent>) -> gtk::Lis
     page_box.add(&page_stack);
 
     let window = gtk::WindowBuilder::new().resizable(true).build();
+    window.connect_key_press_event(move |w, key_event| {
+        match key_event.get_keyval().name() {
+            Some(key_name) if key_name == "Escape" => {
+                w.close();
+            }
+            _ => {}
+        }
+
+        Inhibit(false)
+    });
     window.add(&page_box);
     window.set_title("OTPTray Setup");
     window.set_titlebar(Some(&header_bar));
