@@ -4,9 +4,9 @@ extern crate lazy_static;
 use atomic_immut::AtomicImmut;
 
 use serde::Deserialize;
+use simple_logger::SimpleLogger;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
-
 use std::env;
 use std::hash::{Hash, Hasher};
 use std::path::Path;
@@ -25,12 +25,13 @@ lazy_static! {
 
 static VALID_HASH_FNS: &'static [&str] = &["sha1", "sha256", "sha512"];
 
+#[derive(Debug)]
 enum UiEvent {
     OpenSetup,
     OpenEntry(EntryAction),
     SaveEntry(OtpEntry, EntryAction),
     RemoveEntry(usize),
-    CopyToClipboard(String),
+    CopyToClipboard(u64),
     Quit,
 }
 
@@ -225,18 +226,16 @@ impl AppState {
         }
     }
 
-    fn add_otp_value<T: Hash>(&mut self, entry: &T, otp_code: String) {
+    fn add_otp_value<T: Hash>(&mut self, entry: &T, otp_code: String) -> u64 {
         let mut hasher = DefaultHasher::new();
         entry.hash(&mut hasher);
         let key = hasher.finish();
         self.otp_codes.insert(key, otp_code);
+        key
     }
 
-    fn get_otp_value<T: Hash>(&self, entry: &T) -> Option<&String> {
-        let mut hasher = DefaultHasher::new();
-        entry.hash(&mut hasher);
-        let key = hasher.finish();
-        self.otp_codes.get(&key)
+    fn get_otp_value_by_id(&self, id: u64) -> Option<&String> {
+        self.otp_codes.get(&id)
     }
 
     fn save_entry(&self, otp_entry: OtpEntry, entry_action: EntryAction) -> AppState {
@@ -527,25 +526,21 @@ fn setup_window(app_state: Arc<AppState>, tx: glib::Sender<UiEvent>) {
     window.show_all();
 }
 
-fn build_menu(tx: glib::Sender<UiEvent>) -> gtk::Menu {
+fn build_menu(app_state: Arc<AppState>, tx: glib::Sender<UiEvent>) -> (AppState, gtk::Menu) {
     let menu = gtk::Menu::new();
 
-    let app_state = APP_STATE.load();
     let mut new_app_state = app_state.menu_reset();
     if !app_state.otp_entries.is_empty() {
         for entry in &app_state.otp_entries {
             let otp_value = entry.get_otp_value();
             let display = format!("{}: {}", otp_value.name, otp_value.otp);
             let otp_item = gtk::MenuItem::with_label(&display);
+            let menu_item_id = new_app_state.add_otp_value(&otp_item, otp_value.otp.clone());
             let copy_tx = tx.clone();
-            otp_item.connect_activate(move |menu_item| {
-                let app_state = APP_STATE.load();
-                if let Some(code) = app_state.get_otp_value(&menu_item) {
-                    let _ = copy_tx.send(UiEvent::CopyToClipboard(code.to_string()));
-                }
+            otp_item.connect_activate(move |_| {
+                let _ = copy_tx.send(UiEvent::CopyToClipboard(menu_item_id));
             });
             menu.append(&otp_item);
-            new_app_state.add_otp_value(&otp_item, otp_value.otp.clone());
         }
     } else {
         menu.append(&gtk::MenuItem::with_label(
@@ -568,17 +563,19 @@ fn build_menu(tx: glib::Sender<UiEvent>) -> gtk::Menu {
     menu.append(&setup_item);
     menu.append(&quit_item);
 
-    APP_STATE.store(new_app_state);
-    menu
+    (new_app_state, menu)
 }
 
 fn periodic_otp_task(indicator: &mut AppIndicator, tx: glib::Sender<UiEvent>) {
-    let mut menu = build_menu(tx);
+    let app_state = APP_STATE.load();
+    let (new_app_state, mut menu) = build_menu(app_state, tx);
+    APP_STATE.store(new_app_state);
     indicator.set_menu(&mut menu);
     menu.show_all();
 }
 
 fn main() {
+    SimpleLogger::new().init().unwrap();
     gtk::init().unwrap();
 
     let (tx, rx): (glib::Sender<UiEvent>, glib::Receiver<UiEvent>) =
@@ -601,11 +598,15 @@ fn main() {
     });
 
     rx.attach(None, move |event| {
+        log::debug!("Got UI event: {:?}", event);
         match event {
-            UiEvent::CopyToClipboard(code) => {
-                let atom = gdk::Atom::intern("CLIPBOARD");
-                let clipboard = gtk::Clipboard::get(&atom);
-                clipboard.set_text(&code);
+            UiEvent::CopyToClipboard(menu_item_id) => {
+                let app_state = APP_STATE.load();
+                if let Some(code) = app_state.get_otp_value_by_id(menu_item_id) {
+                    let atom = gdk::Atom::intern("CLIPBOARD");
+                    let clipboard = gtk::Clipboard::get(&atom);
+                    clipboard.set_text(code);
+                }
             }
             UiEvent::OpenSetup => {
                 setup_window(APP_STATE.load(), tx.clone());
