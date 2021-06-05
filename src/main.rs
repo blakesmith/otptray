@@ -413,7 +413,39 @@ fn otp_entry_window(otp_entry: &OtpEntry, entry_action: EntryAction, tx: glib::S
     window.show_all();
 }
 
-fn setup_page(app_state: &AppState, tx: glib::Sender<UiEvent>) -> gtk::Box {
+fn build_otp_list(otp_list: &mut gtk::ListBox, otp_entries: &[OtpEntry]) {
+    otp_list.foreach(|c| otp_list.remove(c));
+
+    for entry in otp_entries {
+        let row = gtk::ListBoxRowBuilder::new()
+            .child(&gtk::LabelBuilder::new().label(&entry.name).build())
+            .build();
+        otp_list.add(&row);
+    }
+
+    otp_list.show_all();
+}
+
+fn otp_configuration(otp_entries: &[OtpEntry]) -> (gtk::Frame, gtk::ListBox) {
+    let mut otp_list = gtk::ListBoxBuilder::new()
+        .selection_mode(gtk::SelectionMode::Single)
+        .build();
+    build_otp_list(&mut otp_list, otp_entries);
+    let viewport = gtk::ViewportBuilder::new().child(&otp_list).build();
+    let window = gtk::ScrolledWindowBuilder::new()
+        .hexpand(true)
+        .vexpand(true)
+        .child(&viewport)
+        .build();
+    let frame = gtk::FrameBuilder::new()
+        .label("One-Time Password Setup")
+        .margin(5)
+        .child(&window)
+        .build();
+    (frame, otp_list)
+}
+
+fn setup_page(app_state: &AppState, tx: glib::Sender<UiEvent>) -> (gtk::Box, gtk::ListBox) {
     let page_box = gtk::BoxBuilder::new()
         .orientation(gtk::Orientation::Vertical)
         .build();
@@ -462,7 +494,7 @@ fn setup_page(app_state: &AppState, tx: glib::Sender<UiEvent>) -> gtk::Box {
     button_box.add(&remove_button);
     page_box.add(&frame);
     page_box.add(&button_box);
-    page_box
+    (page_box, otp_list)
 }
 
 fn about_page() -> gtk::Box {
@@ -475,34 +507,11 @@ fn about_page() -> gtk::Box {
     gtk_box
 }
 
-fn otp_configuration(otp_entries: &[OtpEntry]) -> (gtk::Frame, gtk::ListBox) {
-    let otp_list = gtk::ListBoxBuilder::new()
-        .selection_mode(gtk::SelectionMode::Single)
-        .build();
-    for entry in otp_entries {
-        let row = gtk::ListBoxRowBuilder::new()
-            .child(&gtk::LabelBuilder::new().label(&entry.name).build())
-            .build();
-        otp_list.add(&row);
-    }
-    let viewport = gtk::ViewportBuilder::new().child(&otp_list).build();
-    let window = gtk::ScrolledWindowBuilder::new()
-        .hexpand(true)
-        .vexpand(true)
-        .child(&viewport)
-        .build();
-    let frame = gtk::FrameBuilder::new()
-        .label("One-Time Password Setup")
-        .margin(5)
-        .child(&window)
-        .build();
-    (frame, otp_list)
-}
-
-fn setup_window(app_state: Arc<AppState>, tx: glib::Sender<UiEvent>) {
+fn setup_window(app_state: Arc<AppState>, tx: glib::Sender<UiEvent>) -> gtk::ListBox {
     let page_stack = gtk::StackBuilder::new().build();
 
-    page_stack.add_titled(&setup_page(&app_state, tx), "Setup", "Setup");
+    let (setup_box, otp_list) = setup_page(&app_state, tx);
+    page_stack.add_titled(&setup_box, "Setup", "Setup");
     page_stack.add_titled(&about_page(), "About", "About");
 
     let page_switcher = gtk::StackSwitcherBuilder::new().stack(&page_stack).build();
@@ -525,6 +534,7 @@ fn setup_window(app_state: Arc<AppState>, tx: glib::Sender<UiEvent>) {
     window.set_position(gtk::WindowPosition::Center);
     window.set_default_size(250, 200);
     window.show_all();
+    otp_list
 }
 
 fn build_menu(app_state: Arc<AppState>, tx: glib::Sender<UiEvent>) -> (AppState, gtk::Menu) {
@@ -589,6 +599,8 @@ fn main() {
         Continue(true)
     });
 
+    let mut otp_setup_list: Option<gtk::ListBox> = None;
+
     let event_tx = tx.clone();
     rx.attach(None, move |event| {
         log::debug!("Got UI event: {:?}", event);
@@ -609,7 +621,8 @@ fn main() {
                 }
             }
             UiEvent::OpenSetup => {
-                setup_window(APP_STATE.load(), event_tx.clone());
+                let otp_list = setup_window(APP_STATE.load(), event_tx.clone());
+                otp_setup_list = Some(otp_list);
             }
             UiEvent::OpenEntry(entry_action) => match entry_action {
                 EntryAction::Add => {
@@ -623,12 +636,20 @@ fn main() {
             },
             UiEvent::SaveEntry(entry, entry_action) => {
                 log::info!("Saving: {:?}", entry);
-                APP_STATE.store(APP_STATE.load().save_entry(entry, entry_action));
+                let app_state = APP_STATE.load().save_entry(entry, entry_action);
+                if let Some(ref mut otp_list) = otp_setup_list {
+                    build_otp_list(otp_list, &app_state.otp_entries);
+                }
+                APP_STATE.store(app_state);
                 let _ = event_tx.send(UiEvent::TotpRefresh);
             }
             UiEvent::RemoveEntry(selected_row) => {
                 log::info!("Removing entry at index: {}", selected_row);
-                APP_STATE.store(APP_STATE.load().remove_entry_index(selected_row));
+                let app_state = APP_STATE.load().remove_entry_index(selected_row);
+                if let Some(ref mut otp_list) = otp_setup_list {
+                    build_otp_list(otp_list, &app_state.otp_entries);
+                }
+                APP_STATE.store(app_state);
                 let _ = event_tx.send(UiEvent::TotpRefresh);
             }
             UiEvent::Quit => {
