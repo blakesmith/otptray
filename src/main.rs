@@ -457,11 +457,14 @@ fn otp_entry_window(otp_entry: &OtpEntry, entry_action: EntryAction, tx: glib::S
 fn build_otp_list(otp_list: &mut gtk::ListBox, otp_entries: &[OtpEntry]) {
     otp_list.foreach(|c| otp_list.remove(c));
 
-    for entry in otp_entries {
+    for (i, entry) in otp_entries.iter().enumerate() {
         let row = gtk::ListBoxRowBuilder::new()
             .child(&gtk::LabelBuilder::new().label(&entry.name).build())
             .build();
         otp_list.add(&row);
+        if i == 0 {
+            otp_list.select_row(Some(&row));
+        }
     }
 
     otp_list.show_all();
