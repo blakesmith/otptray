@@ -230,11 +230,21 @@ impl AppState {
     }
 
     fn save_to_config(&self) -> Result<(), Error> {
-        OpenOptions::new()
+        #[cfg(target_family = "unix")]
+        use std::os::unix::fs::OpenOptionsExt;
+
+        let mut base_options = OpenOptions::new();
+        base_options
             .write(true)
             .create(true)
             .truncate(true)
-            .read(true)
+            .read(true);
+
+        if cfg!(unix) {
+            base_options.mode(0o600);
+        }
+
+        base_options
             .open(Self::config_path()?)
             .map_err(|err| err.into())
             .and_then(|file| {
