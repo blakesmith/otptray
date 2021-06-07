@@ -643,9 +643,9 @@ fn main() {
 
     let mut indicator = AppIndicator::new("OTP Tray", "");
     indicator.set_status(AppIndicatorStatus::Active);
-    let icon_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
-    indicator.set_icon_theme_path(icon_path.to_str().unwrap());
-    indicator.set_icon_full("rust-logo-64x64-white", "icon");
+    //    let icon_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    //    indicator.set_icon_theme_path(icon_path.to_str().unwrap());
+    indicator.set_icon_full("otptray", "icon");
 
     let periodic_tx = tx.clone();
     glib::timeout_add_seconds_local(10, move || {

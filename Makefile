@@ -5,9 +5,11 @@ DEB_DIR=deb
 DEB=$(PACKAGE_DIR).deb
 BIN=target/release/$(APPLICATION)
 
+RUST_SOURCES := $(shell find src -name '*.rs')
+
 all: $(DEB)
 
-$(BIN):
+$(BIN): $(RUST_SOURCES)
 	cargo build --release
 
 $(PACKAGE_DIR): $(BIN)
@@ -21,7 +23,7 @@ $(DEB): $(PACKAGE_DIR)
 	dpkg-deb --build $(PACKAGE_DIR)
 
 clean:
-	rm -rf $(PACKAGE_DIR)
+	rm -rf $(PACKAGE_DIR) $(DEB)
 
 deep_clean: clean
 	cargo clean
