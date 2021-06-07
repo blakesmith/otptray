@@ -7,10 +7,9 @@ use serde::{Deserialize, Serialize};
 use simple_logger::SimpleLogger;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
-use std::env;
 use std::fs::OpenOptions;
 use std::hash::{Hash, Hasher};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -643,8 +642,6 @@ fn main() {
 
     let mut indicator = AppIndicator::new("OTP Tray", "");
     indicator.set_status(AppIndicatorStatus::Active);
-    //    let icon_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
-    //    indicator.set_icon_theme_path(icon_path.to_str().unwrap());
     indicator.set_icon_full("otptray", "icon");
 
     let periodic_tx = tx.clone();
