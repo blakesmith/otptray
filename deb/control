@@ -1,0 +1,5 @@
+Package: otptray
+Version: 0.0.1
+Architecture: amd64
+Maintainer: Blake Smith <blake@sproutsocial.com>
+Description: Convenient 2FA and TOTP tray indicator

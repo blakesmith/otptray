@@ -1,0 +1,11 @@
+[Desktop Entry]
+Icon=otptray
+Name=OTPTray
+Comment=Simple 2FA TOTP Indicator Tray
+Exec=/usr/bin/otptray
+Terminal=false
+Type=Application
+Categories=Utility;TrayIcon;
+Keywords=2FA,OTP,TOTP
+OnlyShowIn=GNOME;KDE;LXDE;LXQt;MATE;Razor;ROX;TDE;Unity;XFCE;EDE;Cinnamon;Pantheon;
+StartupNotify=false
