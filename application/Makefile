@@ -7,6 +7,21 @@ BIN=target/release/$(APPLICATION)
 
 RUST_SOURCES := $(shell find src -name '*.rs')
 
+UBUNTU_FOCAL_PKG=$(PACKAGE_DIR)_focal.deb
+UBUNTU_GROOVY_PKG=$(PACKAGE_DIR)_groovy.deb
+
+$(UBUNTU_FOCAL_PKG):
+	vagrant up focal64-build
+	vagrant ssh focal64-build -c 'cd /vagrant && make deep_clean all'
+	mv $(DEB) $@
+focal: $(UBUNTU_FOCAL_PKG)
+
+$(UBUNTU_GROOVY_PKG):
+	vagrant up groovy64-build
+	vagrant ssh groovy64-build -c 'cd /vagrant && make deep_clean all'
+	mv $(DEB) $@
+groovy: $(UBUNTU_GROOVY_PKG)
+
 all: $(DEB)
 
 $(BIN): $(RUST_SOURCES)
@@ -28,4 +43,4 @@ clean:
 deep_clean: clean
 	cargo clean
 
-.PHONY: clean deep_clean all
+.PHONY: clean deep_clean all groovy focal
