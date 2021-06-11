@@ -15,6 +15,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use totp_lite::{totp_custom, Sha1, Sha256, Sha512};
 
+#[cfg(target_os = "linux")]
+mod linux;
+use linux::gui;
+
 use gtk::prelude::*;
 use libappindicator::{AppIndicator, AppIndicatorStatus};
 
@@ -645,9 +649,9 @@ fn main() {
     indicator.set_icon_full("otptray", "icon");
 
     let periodic_tx = tx.clone();
-    glib::timeout_add_seconds_local(10, move || {
+    gui::periodic_seconds_timer(10, move || {
         let _ = periodic_tx.send(UiEvent::TotpRefresh);
-        Continue(true)
+        true
     });
 
     let mut otp_setup_list: Option<gtk::ListBox> = None;
