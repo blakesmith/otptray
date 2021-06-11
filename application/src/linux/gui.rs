@@ -335,6 +335,7 @@ fn build_menu(app_state: Arc<AppState>, tx: glib::Sender<UiEvent>) -> (AppState,
 }
 
 pub fn ui_main(global_app_state: Arc<AtomicImmut<AppState>>) {
+    log::info!("Staring linux GTK ui main");
     gtk::init().unwrap();
 
     let (tx, rx): (glib::Sender<UiEvent>, glib::Receiver<UiEvent>) =

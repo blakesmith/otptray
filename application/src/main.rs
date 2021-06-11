@@ -2,7 +2,6 @@
 extern crate lazy_static;
 
 use atomic_immut::AtomicImmut;
-
 use simple_logger::SimpleLogger;
 use std::sync::Arc;
 
@@ -10,7 +9,13 @@ mod common;
 
 #[cfg(target_os = "linux")]
 mod linux;
+#[cfg(target_os = "linux")]
 use linux::gui;
+
+#[cfg(target_os = "macos")]
+mod macos;
+#[cfg(target_os = "macos")]
+use macos::gui;
 
 use crate::common::*;
 
