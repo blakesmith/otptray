@@ -4,9 +4,12 @@ use std::sync::Arc;
 
 use crate::common::*;
 
-use cocoa::base::{selector, nil};
-use cocoa::foundation::{NSAutoreleasePool, NSString, NSProcessInfo};
-use cocoa::appkit::{NSApp, NSApplication, NSButton, NSStatusBar, NSStatusItem, NSSquareStatusItemLength, NSMenu, NSMenuItem, NSApplicationActivationPolicyRegular};
+use cocoa::appkit::{
+    NSApp, NSApplication, NSApplicationActivationPolicyRegular, NSButton, NSMenu, NSMenuItem,
+    NSSquareStatusItemLength, NSStatusBar, NSStatusItem,
+};
+use cocoa::base::{nil, selector};
+use cocoa::foundation::{NSAutoreleasePool, NSProcessInfo, NSString};
 
 pub fn ui_main(global_app_state: Arc<AtomicImmut<AppState>>) {
     log::info!("Staring macOS ui main");
