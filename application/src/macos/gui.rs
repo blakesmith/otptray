@@ -8,8 +8,27 @@ use cocoa::appkit::{
     NSApp, NSApplication, NSApplicationActivationPolicyRegular, NSButton, NSMenu, NSMenuItem,
     NSSquareStatusItemLength, NSStatusBar, NSStatusItem,
 };
-use cocoa::base::{nil, selector};
+use cocoa::base::{nil, selector, id};
 use cocoa::foundation::{NSAutoreleasePool, NSProcessInfo, NSString};
+
+fn build_menu(app_state: Arc<AppState>) -> (AppState, id) {
+    let new_app_state = app_state.menu_reset();
+    unsafe {
+        let menu = NSMenu::new(nil).autorelease();
+
+        let quit_prefix = NSString::alloc(nil).init_str("Quit ");
+        let quit_title =
+            quit_prefix.stringByAppendingString_(NSProcessInfo::processInfo(nil).processName());
+        let quit_action = selector("terminate:");
+        let quit_key = NSString::alloc(nil).init_str("q");
+        let quit_item = NSMenuItem::alloc(nil)
+            .initWithTitle_action_keyEquivalent_(quit_title, quit_action, quit_key)
+            .autorelease();
+        menu.addItem_(quit_item);
+
+        (new_app_state, menu)
+    }
+}
 
 pub fn ui_main(global_app_state: Arc<AtomicImmut<AppState>>) {
     log::info!("Staring macOS ui main");
@@ -24,18 +43,10 @@ pub fn ui_main(global_app_state: Arc<AtomicImmut<AppState>>) {
         let status_button = status_item.button();
         status_button.setTitle_(NSString::alloc(nil).init_str("otp"));
 
-        let menu = NSMenu::new(nil).autorelease();
+        // TODO: Move to TotpRefresh UIEvent
+        let (app_state, menu) = build_menu(global_app_state.load());
         status_item.setMenu_(menu);
 
-        let quit_prefix = NSString::alloc(nil).init_str("Quit ");
-        let quit_title =
-            quit_prefix.stringByAppendingString_(NSProcessInfo::processInfo(nil).processName());
-        let quit_action = selector("terminate:");
-        let quit_key = NSString::alloc(nil).init_str("q");
-        let quit_item = NSMenuItem::alloc(nil)
-            .initWithTitle_action_keyEquivalent_(quit_title, quit_action, quit_key)
-            .autorelease();
-        menu.addItem_(quit_item);
         app.run();
     }
 }
