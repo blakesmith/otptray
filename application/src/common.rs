@@ -282,6 +282,12 @@ pub struct OtpValue {
     pub otp: String,
 }
 
+impl OtpValue {
+    pub fn formatted_menu_display(&self) -> String {
+        format!("{}: {}", self.name, self.otp)
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 pub struct OtpTrayConfig {
     entries: Vec<OtpEntry>,

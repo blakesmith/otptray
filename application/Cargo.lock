@@ -903,6 +903,7 @@ dependencies = [
  "lazy_static",
  "libappindicator",
  "log",
+ "objc",
  "serde",
  "serde_yaml",
  "simple_logger",

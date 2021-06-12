@@ -1,6 +1,10 @@
 #[macro_use]
 extern crate lazy_static;
 
+#[cfg(target_os = "macos")]
+#[macro_use]
+extern crate objc;
+
 use atomic_immut::AtomicImmut;
 use simple_logger::SimpleLogger;
 use std::sync::Arc;

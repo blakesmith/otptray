@@ -11,10 +11,27 @@ use cocoa::appkit::{
 use cocoa::base::{nil, selector, id};
 use cocoa::foundation::{NSAutoreleasePool, NSProcessInfo, NSString};
 
+use objc::sel;
+use objc::runtime::{Object, Sel};
+
+pub extern fn menu_selected(_menu_item: &Object, _sel: Sel) {
+    log::info!("Selected menu item");
+}
+
 fn build_menu(app_state: Arc<AppState>) -> (AppState, id) {
     let new_app_state = app_state.menu_reset();
+    let menu_selector = sel!(menu_selected);
     unsafe {
         let menu = NSMenu::new(nil).autorelease();
+
+        for entry in &app_state.otp_entries {
+            let otp_value = entry.get_otp_value();
+            let entry_label = NSString::alloc(nil).init_str(&otp_value.formatted_menu_display());
+            let entry_item = NSMenuItem::alloc(nil)
+                .initWithTitle_action_keyEquivalent_(entry_label, menu_selector, NSString::alloc(nil).init_str(""))
+                .autorelease();
+            menu.addItem_(entry_item);
+        }
 
         let quit_prefix = NSString::alloc(nil).init_str("Quit ");
         let quit_title =

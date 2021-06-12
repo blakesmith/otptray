@@ -301,8 +301,7 @@ fn build_menu(app_state: Arc<AppState>, tx: glib::Sender<UiEvent>) -> (AppState,
     if !app_state.otp_entries.is_empty() {
         for entry in &app_state.otp_entries {
             let otp_value = entry.get_otp_value();
-            let display = format!("{}: {}", otp_value.name, otp_value.otp);
-            let otp_item = gtk::MenuItem::with_label(&display);
+            let otp_item = gtk::MenuItem::with_label(&otp_value.formatted_menu_display());
             let menu_item_id = new_app_state.add_otp_value(&otp_item, otp_value.otp.clone());
             let copy_tx = tx.clone();
             otp_item.connect_activate(move |_| {
