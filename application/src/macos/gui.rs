@@ -11,25 +11,38 @@ use cocoa::appkit::{
 use cocoa::base::{nil, selector, id};
 use cocoa::foundation::{NSAutoreleasePool, NSProcessInfo, NSString};
 
-use objc::sel;
-use objc::runtime::{Object, Sel};
+use objc::{msg_send, sel, Message};
+use objc::declare::ClassDecl;
+use objc::runtime::{Object, Sel, Class};
 
-pub extern fn menu_selected(_menu_item: &Object, _sel: Sel) {
+pub extern "C" fn menu_selected(_menu_item: &Object, _sel: Sel) {
     log::info!("Selected menu item");
+}
+
+lazy_static! {
+    static ref EVENT_RESPONDER: &'static Class = {
+        let superclass = Class::get("NSObject").unwrap();
+        let mut class_decl = ClassDecl::new("EventResponder", superclass).unwrap();
+        unsafe { class_decl.add_method(sel!(menu_selected), menu_selected as extern "C" fn(&Object, Sel)); }
+        class_decl.register()
+    };
 }
 
 fn build_menu(app_state: Arc<AppState>) -> (AppState, id) {
     let new_app_state = app_state.menu_reset();
-    let menu_selector = sel!(menu_selected);
+    let responder: id = unsafe { msg_send![*EVENT_RESPONDER, new] };
     unsafe {
         let menu = NSMenu::new(nil).autorelease();
 
         for entry in &app_state.otp_entries {
+            let action = sel!(menu_selected:);
             let otp_value = entry.get_otp_value();
             let entry_label = NSString::alloc(nil).init_str(&otp_value.formatted_menu_display());
             let entry_item = NSMenuItem::alloc(nil)
-                .initWithTitle_action_keyEquivalent_(entry_label, menu_selector, NSString::alloc(nil).init_str(""))
+                .initWithTitle_action_keyEquivalent_(entry_label, action, NSString::alloc(nil).init_str(""))
                 .autorelease();
+            let _: () = msg_send![entry_item, setTarget: responder];
+            let _: () = msg_send![entry_item, setAction: sel!(menu_selected)];
             menu.addItem_(entry_item);
         }
 
