@@ -47,6 +47,8 @@ fn build_menu(app_state: Arc<AppState>) -> (AppState, id) {
             menu.addItem_(entry_item);
         }
 
+        menu.addItem_(NSMenuItem::separatorItem(nil));
+
         let quit_prefix = NSString::alloc(nil).init_str("Quit ").autorelease();
         let quit_title =
             quit_prefix.stringByAppendingString_(NSProcessInfo::processInfo(nil).processName());
