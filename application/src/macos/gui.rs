@@ -11,7 +11,7 @@ use cocoa::appkit::{
 use cocoa::base::{nil, selector, id};
 use cocoa::foundation::{NSAutoreleasePool, NSProcessInfo, NSString};
 
-use objc::{msg_send, sel, Message};
+use objc::{msg_send, sel};
 use objc::declare::ClassDecl;
 use objc::runtime::{Object, Sel, Class};
 
