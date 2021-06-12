@@ -37,7 +37,7 @@ fn build_menu(app_state: Arc<AppState>) -> (AppState, id) {
         for entry in &app_state.otp_entries {
             let action = sel!(menu_selected:);
             let otp_value = entry.get_otp_value();
-            let entry_label = NSString::alloc(nil).init_str(&otp_value.formatted_menu_display());
+            let entry_label = NSString::alloc(nil).init_str(&otp_value.formatted_menu_display()).autorelease();
             let entry_item = NSMenuItem::alloc(nil)
                 .initWithTitle_action_keyEquivalent_(entry_label, action, NSString::alloc(nil).init_str(""))
                 .autorelease();
@@ -46,15 +46,16 @@ fn build_menu(app_state: Arc<AppState>) -> (AppState, id) {
             menu.addItem_(entry_item);
         }
 
-        let quit_prefix = NSString::alloc(nil).init_str("Quit ");
+        let quit_prefix = NSString::alloc(nil).init_str("Quit ").autorelease();
         let quit_title =
             quit_prefix.stringByAppendingString_(NSProcessInfo::processInfo(nil).processName());
         let quit_action = selector("terminate:");
-        let quit_key = NSString::alloc(nil).init_str("q");
+        let quit_key = NSString::alloc(nil).init_str("q").autorelease();
         let quit_item = NSMenuItem::alloc(nil)
             .initWithTitle_action_keyEquivalent_(quit_title, quit_action, quit_key)
             .autorelease();
         menu.addItem_(quit_item);
+        responder.autorelease();
 
         (new_app_state, menu)
     }
@@ -71,7 +72,7 @@ pub fn ui_main(global_app_state: Arc<AtomicImmut<AppState>>) {
         let status_bar = NSStatusBar::systemStatusBar(nil);
         let status_item = status_bar.statusItemWithLength_(NSSquareStatusItemLength);
         let status_button = status_item.button();
-        status_button.setTitle_(NSString::alloc(nil).init_str("otp"));
+        status_button.setTitle_(NSString::alloc(nil).init_str("otp").autorelease());
 
         // TODO: Move to TotpRefresh UIEvent
         let (app_state, menu) = build_menu(global_app_state.load());
