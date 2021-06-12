@@ -15,15 +15,16 @@ use objc::{msg_send, sel};
 use objc::declare::ClassDecl;
 use objc::runtime::{Object, Sel, Class};
 
-pub extern "C" fn menu_selected(_menu_item: &Object, _sel: Sel) {
-    log::info!("Selected menu item");
+pub extern "C" fn menu_selected(_this: &Object, _sel: Sel, target: id) {
+    let tag: i64 = unsafe { msg_send![target, tag] };
+    log::info!("Selected menu item: {}", tag);
 }
 
 lazy_static! {
     static ref EVENT_RESPONDER: &'static Class = {
         let superclass = Class::get("NSObject").unwrap();
         let mut class_decl = ClassDecl::new("EventResponder", superclass).unwrap();
-        unsafe { class_decl.add_method(sel!(menu_selected), menu_selected as extern "C" fn(&Object, Sel)); }
+        unsafe { class_decl.add_method(sel!(menu_selected:), menu_selected as extern "C" fn(&Object, Sel, id)); }
         class_decl.register()
     };
 }
@@ -39,10 +40,10 @@ fn build_menu(app_state: Arc<AppState>) -> (AppState, id) {
             let otp_value = entry.get_otp_value();
             let entry_label = NSString::alloc(nil).init_str(&otp_value.formatted_menu_display()).autorelease();
             let entry_item = NSMenuItem::alloc(nil)
-                .initWithTitle_action_keyEquivalent_(entry_label, action, NSString::alloc(nil).init_str(""))
+                .initWithTitle_action_keyEquivalent_(entry_label, action, NSString::alloc(nil).init_str("").autorelease())
                 .autorelease();
-            let _: () = msg_send![entry_item, setTarget: responder];
-            let _: () = msg_send![entry_item, setAction: sel!(menu_selected)];
+            NSMenuItem::setTarget_(entry_item, responder);
+            let _: () = msg_send![entry_item, setTag: 123]; // TODO: Pick a unique ID here.
             menu.addItem_(entry_item);
         }
 
