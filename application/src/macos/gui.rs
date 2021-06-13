@@ -17,33 +17,38 @@ use objc::{msg_send, sel};
 use objc::declare::ClassDecl;
 use objc::runtime::{Object, Sel, Class};
 
-pub extern "C" fn menu_selected(this: &Object, _sel: Sel, target: id) {
-    let tag: i64 = unsafe { msg_send![target, tag] };
-    log::info!("Selected menu item: {}", tag);
-    let tx = extract_tx(this);
-    let _ = tx.send(UiEvent::TotpRefresh);
-    drain_events(extract_rx(this));
-}
+struct EventResponder {}
 
-fn extract_tx(this: &Object) -> &mut Sender<UiEvent> {
-    unsafe { &mut *(*this.get_ivar::<*mut c_void>("tx") as *mut Sender<UiEvent>) }
-}
-
-fn extract_rx(this: &Object) -> &mut Receiver<UiEvent> {
-    unsafe { &mut *(*this.get_ivar::<*mut c_void>("rx") as *mut Receiver<UiEvent>) }
-}
-
-fn drain_events(rx: &mut Receiver<UiEvent>) {
-    while let Ok(event) = rx.try_recv() {
-        log::debug!("Got event: {:?}", event);
+impl EventResponder {
+    pub extern "C" fn menu_selected(this: &Object, _sel: Sel, target: id) {
+        let tag: i64 = unsafe { msg_send![target, tag] };
+        log::info!("Selected menu item: {}", tag);
+        let tx = Self::extract_tx(this);
+        let _ = tx.send(UiEvent::TotpRefresh);
+        Self::drain_events(Self::extract_rx(this));
     }
-}
 
-pub extern "C" fn set_sender_receiver(this: &mut Object, _sel: Sel, tx: *mut c_void, rx: *mut c_void) {
-    unsafe {
-        this.set_ivar("tx", tx);
-        this.set_ivar("rx", rx);
+    pub extern "C" fn set_sender_receiver(this: &mut Object, _sel: Sel, tx: *mut c_void, rx: *mut c_void) {
+        unsafe {
+            this.set_ivar("tx", tx);
+            this.set_ivar("rx", rx);
+        }
     }
+
+    fn extract_tx(this: &Object) -> &mut Sender<UiEvent> {
+        unsafe { &mut *(*this.get_ivar::<*mut c_void>("tx") as *mut Sender<UiEvent>) }
+    }
+
+    fn extract_rx(this: &Object) -> &mut Receiver<UiEvent> {
+        unsafe { &mut *(*this.get_ivar::<*mut c_void>("rx") as *mut Receiver<UiEvent>) }
+    }
+
+    fn drain_events(rx: &mut Receiver<UiEvent>) {
+        while let Ok(event) = rx.try_recv() {
+            log::debug!("Got event: {:?}", event);
+        }
+    }
+
 }
 
 lazy_static! {
@@ -53,8 +58,8 @@ lazy_static! {
         unsafe {
             class_decl.add_ivar::<*mut c_void>("tx");
             class_decl.add_ivar::<*mut c_void>("rx");
-            class_decl.add_method(sel!(menu_selected:), menu_selected as extern "C" fn(&Object, Sel, id));
-            class_decl.add_method(sel!(set_sender_receiver:rx:), set_sender_receiver as extern "C" fn(&mut Object, Sel, *mut c_void, *mut c_void));
+            class_decl.add_method(sel!(menu_selected:), EventResponder::menu_selected as extern "C" fn(&Object, Sel, id));
+            class_decl.add_method(sel!(set_sender_receiver:rx:), EventResponder::set_sender_receiver as extern "C" fn(&mut Object, Sel, *mut c_void, *mut c_void));
         }
         class_decl.register()
     };
