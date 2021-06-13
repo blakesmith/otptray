@@ -8,10 +8,10 @@ use crate::common::*;
 
 use cocoa::appkit::{
     NSApp, NSApplication, NSApplicationActivationPolicyRegular, NSButton, NSMenu, NSMenuItem,
-    NSSquareStatusItemLength, NSStatusBar, NSStatusItem,
+    NSPasteboard, NSPasteboardTypeString, NSSquareStatusItemLength, NSStatusBar, NSStatusItem,
 };
 use cocoa::base::{id, nil, selector};
-use cocoa::foundation::{NSAutoreleasePool, NSProcessInfo, NSString};
+use cocoa::foundation::{NSArray, NSAutoreleasePool, NSProcessInfo, NSString};
 
 use objc::declare::ClassDecl;
 use objc::runtime::{Class, Object, Sel};
@@ -51,6 +51,22 @@ impl EventResponder {
     fn drain_events(rx: &mut Receiver<UiEvent>) {
         while let Ok(event) = rx.try_recv() {
             log::debug!("Got event: {:?}", event);
+            match event {
+                UiEvent::CopyToClipboard(menu_id) => {
+                    Self::copy_to_pasteboard(&menu_id.to_string()); // Copy actual TOTP
+                }
+                _ => {}
+            }
+        }
+    }
+
+    fn copy_to_pasteboard(contents: &str) {
+        unsafe {
+            let ns_contents = NSString::alloc(nil).init_str(contents).autorelease();
+            let array_contents = NSArray::arrayWithObjects(nil, &[ns_contents]);
+            let pasteboard = NSPasteboard::generalPasteboard(nil);
+            pasteboard.clearContents();
+            pasteboard.writeObjects(array_contents);
         }
     }
 }
