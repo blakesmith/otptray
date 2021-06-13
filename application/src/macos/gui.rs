@@ -1,8 +1,8 @@
 use atomic_immut::AtomicImmut;
 use core::ffi::c_void;
 use log;
-use std::sync::Arc;
 use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::Arc;
 
 use crate::common::*;
 
@@ -10,12 +10,12 @@ use cocoa::appkit::{
     NSApp, NSApplication, NSApplicationActivationPolicyRegular, NSButton, NSMenu, NSMenuItem,
     NSSquareStatusItemLength, NSStatusBar, NSStatusItem,
 };
-use cocoa::base::{nil, selector, id};
+use cocoa::base::{id, nil, selector};
 use cocoa::foundation::{NSAutoreleasePool, NSProcessInfo, NSString};
 
-use objc::{msg_send, sel};
 use objc::declare::ClassDecl;
-use objc::runtime::{Object, Sel, Class};
+use objc::runtime::{Class, Object, Sel};
+use objc::{msg_send, sel};
 
 struct EventResponder {}
 
@@ -28,7 +28,12 @@ impl EventResponder {
         Self::drain_events(Self::extract_rx(this));
     }
 
-    pub extern "C" fn set_sender_receiver(this: &mut Object, _sel: Sel, tx: *mut c_void, rx: *mut c_void) {
+    pub extern "C" fn set_sender_receiver(
+        this: &mut Object,
+        _sel: Sel,
+        tx: *mut c_void,
+        rx: *mut c_void,
+    ) {
         unsafe {
             this.set_ivar("tx", tx);
             this.set_ivar("rx", rx);
@@ -48,7 +53,6 @@ impl EventResponder {
             log::debug!("Got event: {:?}", event);
         }
     }
-
 }
 
 lazy_static! {
@@ -58,14 +62,25 @@ lazy_static! {
         unsafe {
             class_decl.add_ivar::<*mut c_void>("tx");
             class_decl.add_ivar::<*mut c_void>("rx");
-            class_decl.add_method(sel!(menu_selected:), EventResponder::menu_selected as extern "C" fn(&Object, Sel, id));
-            class_decl.add_method(sel!(set_sender_receiver:rx:), EventResponder::set_sender_receiver as extern "C" fn(&mut Object, Sel, *mut c_void, *mut c_void));
+            class_decl.add_method(
+                sel!(menu_selected:),
+                EventResponder::menu_selected as extern "C" fn(&Object, Sel, id),
+            );
+            class_decl.add_method(
+                sel!(set_sender_receiver:rx:),
+                EventResponder::set_sender_receiver
+                    as extern "C" fn(&mut Object, Sel, *mut c_void, *mut c_void),
+            );
         }
         class_decl.register()
     };
 }
 
-fn build_menu(app_state: Arc<AppState>, event_responder: id, tx: Sender<UiEvent>) -> (AppState, id) {
+fn build_menu(
+    app_state: Arc<AppState>,
+    event_responder: id,
+    tx: Sender<UiEvent>,
+) -> (AppState, id) {
     let new_app_state = app_state.menu_reset();
     unsafe {
         let menu = NSMenu::new(nil).autorelease();
@@ -73,9 +88,15 @@ fn build_menu(app_state: Arc<AppState>, event_responder: id, tx: Sender<UiEvent>
         for (i, entry) in app_state.otp_entries.iter().enumerate() {
             let action = sel!(menu_selected:);
             let otp_value = entry.get_otp_value();
-            let entry_label = NSString::alloc(nil).init_str(&otp_value.formatted_menu_display()).autorelease();
+            let entry_label = NSString::alloc(nil)
+                .init_str(&otp_value.formatted_menu_display())
+                .autorelease();
             let entry_item = NSMenuItem::alloc(nil)
-                .initWithTitle_action_keyEquivalent_(entry_label, action, NSString::alloc(nil).init_str("").autorelease())
+                .initWithTitle_action_keyEquivalent_(
+                    entry_label,
+                    action,
+                    NSString::alloc(nil).init_str("").autorelease(),
+                )
                 .autorelease();
             NSMenuItem::setTarget_(entry_item, event_responder);
             let _: () = msg_send![entry_item, setTag: i];
