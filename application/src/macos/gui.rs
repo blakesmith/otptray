@@ -21,10 +21,10 @@ struct EventResponder {}
 
 impl EventResponder {
     pub extern "C" fn menu_selected(this: &Object, _sel: Sel, target: id) {
-        let tag: i64 = unsafe { msg_send![target, tag] };
-        log::info!("Selected menu item: {}", tag);
+        let menu_item_id: i64 = unsafe { msg_send![target, tag] };
+        log::info!("Selected menu item: {}", menu_item_id);
         let tx = Self::extract_tx(this);
-        let _ = tx.send(UiEvent::TotpRefresh);
+        let _ = tx.send(UiEvent::CopyToClipboard(menu_item_id as u64));
         Self::drain_events(Self::extract_rx(this));
     }
 
@@ -70,7 +70,7 @@ fn build_menu(app_state: Arc<AppState>, event_responder: id, tx: Sender<UiEvent>
     unsafe {
         let menu = NSMenu::new(nil).autorelease();
 
-        for entry in &app_state.otp_entries {
+        for (i, entry) in app_state.otp_entries.iter().enumerate() {
             let action = sel!(menu_selected:);
             let otp_value = entry.get_otp_value();
             let entry_label = NSString::alloc(nil).init_str(&otp_value.formatted_menu_display()).autorelease();
@@ -78,7 +78,7 @@ fn build_menu(app_state: Arc<AppState>, event_responder: id, tx: Sender<UiEvent>
                 .initWithTitle_action_keyEquivalent_(entry_label, action, NSString::alloc(nil).init_str("").autorelease())
                 .autorelease();
             NSMenuItem::setTarget_(entry_item, event_responder);
-            let _: () = msg_send![entry_item, setTag: 123]; // TODO: Pick a unique ID here.
+            let _: () = msg_send![entry_item, setTag: i];
             menu.addItem_(entry_item);
         }
 
@@ -100,7 +100,7 @@ fn build_menu(app_state: Arc<AppState>, event_responder: id, tx: Sender<UiEvent>
 
 pub fn ui_main(global_app_state: Arc<AtomicImmut<AppState>>) {
     log::info!("Staring macOS ui main");
-    let (mut tx, mut rx) = channel();
+    let (tx, mut rx) = channel();
     let event_responder: id = unsafe { msg_send![*EVENT_RESPONDER_CLASS, new] };
     let tx_ptr: *mut c_void = &mut tx.clone() as *mut _ as *mut c_void;
     let rx_ptr: *mut c_void = &mut rx as *mut _ as *mut c_void;
