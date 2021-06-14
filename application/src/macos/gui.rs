@@ -33,7 +33,7 @@ lazy_static! {
 }
 
 struct EventResponder {
-    obj_c_responder: id,
+    obj_c_responder: Option<id>,
     global_app_state: Arc<AtomicImmut<AppState>>,
     tx: Sender<UiEvent>,
     rx: Receiver<UiEvent>,
@@ -45,19 +45,21 @@ impl EventResponder {
         tx: Sender<UiEvent>,
         rx: Receiver<UiEvent>,
     ) -> Self {
-        let obj_c_responder: id = unsafe { msg_send![*EVENT_RESPONDER_CLASS, new] };
-        let mut responder = Self {
-            obj_c_responder,
+        Self {
+            obj_c_responder: None,
             global_app_state,
             tx,
             rx,
-        };
+        }
+    }
+
+    fn instantiate_obj_c_responder(&mut self) {
+        let obj_c_responder: id = unsafe { msg_send![*EVENT_RESPONDER_CLASS, new] };
         unsafe {
-            let responder_ptr: *mut c_void = &mut responder as *mut _ as *mut c_void;
+            let responder_ptr: *mut c_void = self as *mut _ as *mut c_void;
             (&mut *obj_c_responder).set_ivar("rust_responder", responder_ptr);
         }
-
-        responder
+        self.obj_c_responder = Some(obj_c_responder);
     }
 
     pub extern "C" fn menu_selected(this: &Object, _sel: Sel, target: id) {
@@ -70,8 +72,14 @@ impl EventResponder {
         responder.drain_events();
     }
 
-    fn rust_responder(this: &Object) -> &mut EventResponder {
-        unsafe { &mut *(*this.get_ivar::<*mut c_void>("rust_responder") as *mut EventResponder) }
+    fn rust_responder(this: &Object) -> &EventResponder {
+        unsafe {
+            let responder_ptr = *this.get_ivar::<*mut c_void>("rust_responder");
+            if responder_ptr.is_null() {
+                panic!("Got back a null rust responder pointer. This should never happen!");
+            }
+            &mut *(responder_ptr as *mut EventResponder)
+        }
     }
 
     fn drain_events(&self) {
@@ -103,7 +111,9 @@ impl EventResponder {
 impl Drop for EventResponder {
     fn drop(&mut self) {
         unsafe {
-            self.obj_c_responder.autorelease();
+            if let Some(obj_c_responder) = self.obj_c_responder {
+                obj_c_responder.autorelease();
+            }
         }
     }
 }
@@ -130,7 +140,7 @@ fn build_menu(
                     NSString::alloc(nil).init_str("").autorelease(),
                 )
                 .autorelease();
-            NSMenuItem::setTarget_(entry_item, event_responder.obj_c_responder);
+            NSMenuItem::setTarget_(entry_item, event_responder.obj_c_responder.expect("No objective-c EventResponder instantiated!"));
             let _: () = msg_send![entry_item, setTag: i];
             menu.addItem_(entry_item);
         }
@@ -155,6 +165,7 @@ pub fn ui_main(global_app_state: Arc<AtomicImmut<AppState>>) {
     log::info!("Staring macOS ui main");
     let (tx, rx) = channel();
     let mut event_responder = EventResponder::new(global_app_state.clone(), tx.clone(), rx);
+    event_responder.instantiate_obj_c_responder();
 
     unsafe {
         let app = NSApp();
