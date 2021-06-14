@@ -67,19 +67,22 @@ impl EventResponder {
         let _ = &responder
             .tx
             .send(UiEvent::CopyToClipboard(menu_item_id as u64));
-        Self::drain_events(&responder.rx);
+        responder.drain_events();
     }
 
     fn rust_responder(this: &Object) -> &mut EventResponder {
         unsafe { &mut *(*this.get_ivar::<*mut c_void>("rust_responder") as *mut EventResponder) }
     }
 
-    fn drain_events(rx: &Receiver<UiEvent>) {
-        while let Ok(event) = rx.try_recv() {
+    fn drain_events(&self) {
+        while let Ok(event) = self.rx.try_recv() {
             log::debug!("Got event: {:?}", event);
             match event {
                 UiEvent::CopyToClipboard(menu_id) => {
-                    Self::copy_to_pasteboard(&menu_id.to_string()); // Copy actual TOTP
+                    let app_state = self.global_app_state.load();
+                    if let Some(otp_value) = app_state.get_otp_value_at_index(menu_id as usize) {
+                        Self::copy_to_pasteboard(&otp_value.otp);
+                    }
                 }
                 _ => {}
             }
@@ -150,7 +153,7 @@ fn build_menu(
 
 pub fn ui_main(global_app_state: Arc<AtomicImmut<AppState>>) {
     log::info!("Staring macOS ui main");
-    let (tx, mut rx) = channel();
+    let (tx, rx) = channel();
     let mut event_responder = EventResponder::new(global_app_state.clone(), tx.clone(), rx);
 
     unsafe {

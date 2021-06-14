@@ -183,8 +183,15 @@ impl AppState {
         key
     }
 
+    // TODO: Deprecate!
     pub fn get_otp_value_by_id(&self, id: u64) -> Option<&String> {
         self.otp_codes.get(&id)
+    }
+
+    pub fn get_otp_value_at_index(&self, index: usize) -> Option<OtpValue> {
+        self.otp_entries
+            .get(index)
+            .map(|entry| entry.get_otp_value())
     }
 
     pub fn save_entry(&self, otp_entry: OtpEntry, entry_action: EntryAction) -> AppState {
