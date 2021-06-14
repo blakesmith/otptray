@@ -17,38 +17,64 @@ use objc::declare::ClassDecl;
 use objc::runtime::{Class, Object, Sel};
 use objc::{msg_send, sel};
 
-struct EventResponder {}
+lazy_static! {
+    static ref EVENT_RESPONDER_CLASS: &'static Class = {
+        let superclass = Class::get("NSObject").unwrap();
+        let mut class_decl = ClassDecl::new("EventResponder", superclass).unwrap();
+        unsafe {
+            class_decl.add_ivar::<*mut c_void>("rust_responder");
+            class_decl.add_method(
+                sel!(menu_selected:),
+                EventResponder::menu_selected as extern "C" fn(&Object, Sel, id),
+            );
+        }
+        class_decl.register()
+    };
+}
+
+struct EventResponder {
+    obj_c_responder: id,
+    global_app_state: Arc<AtomicImmut<AppState>>,
+    tx: Sender<UiEvent>,
+    rx: Receiver<UiEvent>,
+}
 
 impl EventResponder {
+    fn new(
+        global_app_state: Arc<AtomicImmut<AppState>>,
+        tx: Sender<UiEvent>,
+        rx: Receiver<UiEvent>,
+    ) -> Self {
+        let obj_c_responder: id = unsafe { msg_send![*EVENT_RESPONDER_CLASS, new] };
+        let mut responder = Self {
+            obj_c_responder,
+            global_app_state,
+            tx,
+            rx,
+        };
+        unsafe {
+            let responder_ptr: *mut c_void = &mut responder as *mut _ as *mut c_void;
+            (&mut *obj_c_responder).set_ivar("rust_responder", responder_ptr);
+        }
+
+        responder
+    }
+
     pub extern "C" fn menu_selected(this: &Object, _sel: Sel, target: id) {
         let menu_item_id: i64 = unsafe { msg_send![target, tag] };
         log::info!("Selected menu item: {}", menu_item_id);
-        let tx = Self::extract_tx(this);
-        let _ = tx.send(UiEvent::CopyToClipboard(menu_item_id as u64));
-        Self::drain_events(Self::extract_rx(this));
+        let responder = Self::rust_responder(this);
+        let _ = &responder
+            .tx
+            .send(UiEvent::CopyToClipboard(menu_item_id as u64));
+        Self::drain_events(&responder.rx);
     }
 
-    pub extern "C" fn set_sender_receiver(
-        this: &mut Object,
-        _sel: Sel,
-        tx: *mut c_void,
-        rx: *mut c_void,
-    ) {
-        unsafe {
-            this.set_ivar("tx", tx);
-            this.set_ivar("rx", rx);
-        }
+    fn rust_responder(this: &Object) -> &mut EventResponder {
+        unsafe { &mut *(*this.get_ivar::<*mut c_void>("rust_responder") as *mut EventResponder) }
     }
 
-    fn extract_tx(this: &Object) -> &mut Sender<UiEvent> {
-        unsafe { &mut *(*this.get_ivar::<*mut c_void>("tx") as *mut Sender<UiEvent>) }
-    }
-
-    fn extract_rx(this: &Object) -> &mut Receiver<UiEvent> {
-        unsafe { &mut *(*this.get_ivar::<*mut c_void>("rx") as *mut Receiver<UiEvent>) }
-    }
-
-    fn drain_events(rx: &mut Receiver<UiEvent>) {
+    fn drain_events(rx: &Receiver<UiEvent>) {
         while let Ok(event) = rx.try_recv() {
             log::debug!("Got event: {:?}", event);
             match event {
@@ -71,30 +97,17 @@ impl EventResponder {
     }
 }
 
-lazy_static! {
-    static ref EVENT_RESPONDER_CLASS: &'static Class = {
-        let superclass = Class::get("NSObject").unwrap();
-        let mut class_decl = ClassDecl::new("EventResponder", superclass).unwrap();
+impl Drop for EventResponder {
+    fn drop(&mut self) {
         unsafe {
-            class_decl.add_ivar::<*mut c_void>("tx");
-            class_decl.add_ivar::<*mut c_void>("rx");
-            class_decl.add_method(
-                sel!(menu_selected:),
-                EventResponder::menu_selected as extern "C" fn(&Object, Sel, id),
-            );
-            class_decl.add_method(
-                sel!(set_sender_receiver:rx:),
-                EventResponder::set_sender_receiver
-                    as extern "C" fn(&mut Object, Sel, *mut c_void, *mut c_void),
-            );
+            self.obj_c_responder.autorelease();
         }
-        class_decl.register()
-    };
+    }
 }
 
 fn build_menu(
     app_state: Arc<AppState>,
-    event_responder: id,
+    event_responder: &mut EventResponder,
     tx: Sender<UiEvent>,
 ) -> (AppState, id) {
     let new_app_state = app_state.menu_reset();
@@ -114,7 +127,7 @@ fn build_menu(
                     NSString::alloc(nil).init_str("").autorelease(),
                 )
                 .autorelease();
-            NSMenuItem::setTarget_(entry_item, event_responder);
+            NSMenuItem::setTarget_(entry_item, event_responder.obj_c_responder);
             let _: () = msg_send![entry_item, setTag: i];
             menu.addItem_(entry_item);
         }
@@ -138,10 +151,7 @@ fn build_menu(
 pub fn ui_main(global_app_state: Arc<AtomicImmut<AppState>>) {
     log::info!("Staring macOS ui main");
     let (tx, mut rx) = channel();
-    let event_responder: id = unsafe { msg_send![*EVENT_RESPONDER_CLASS, new] };
-    let tx_ptr: *mut c_void = &mut tx.clone() as *mut _ as *mut c_void;
-    let rx_ptr: *mut c_void = &mut rx as *mut _ as *mut c_void;
-    let _: () = unsafe { msg_send![event_responder, set_sender_receiver:tx_ptr rx: rx_ptr] };
+    let mut event_responder = EventResponder::new(global_app_state.clone(), tx.clone(), rx);
 
     unsafe {
         let app = NSApp();
@@ -153,7 +163,8 @@ pub fn ui_main(global_app_state: Arc<AtomicImmut<AppState>>) {
         status_button.setTitle_(NSString::alloc(nil).init_str("otp").autorelease());
 
         // TODO: Move to TotpRefresh UIEvent
-        let (app_state, menu) = build_menu(global_app_state.load(), event_responder, tx.clone());
+        let (app_state, menu) =
+            build_menu(global_app_state.load(), &mut event_responder, tx.clone());
         status_item.setMenu_(menu);
 
         app.run();
