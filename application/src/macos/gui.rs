@@ -10,7 +10,7 @@ use cocoa::appkit::{
     NSApp, NSApplication, NSApplicationActivationPolicyRegular, NSButton, NSMenu, NSMenuItem,
     NSPasteboard, NSPasteboardTypeString, NSSquareStatusItemLength, NSStatusBar, NSStatusItem,
 };
-use cocoa::base::{id, nil, selector};
+use cocoa::base::{id, nil};
 use cocoa::foundation::{NSArray, NSAutoreleasePool, NSProcessInfo, NSString};
 
 use objc::declare::ClassDecl;
@@ -27,6 +27,10 @@ lazy_static! {
                 sel!(menu_selected:),
                 EventResponder::menu_selected as extern "C" fn(&Object, Sel, id),
             );
+            class_decl.add_method(
+                sel!(quit),
+                EventResponder::quit as extern "C" fn(&Object, Sel),
+            );
         }
         class_decl.register()
     };
@@ -34,22 +38,14 @@ lazy_static! {
 
 struct EventResponder {
     obj_c_responder: Option<id>,
-    global_app_state: Arc<AtomicImmut<AppState>>,
     tx: Sender<UiEvent>,
-    rx: Receiver<UiEvent>,
 }
 
 impl EventResponder {
-    fn new(
-        global_app_state: Arc<AtomicImmut<AppState>>,
-        tx: Sender<UiEvent>,
-        rx: Receiver<UiEvent>,
-    ) -> Self {
+    fn new(tx: Sender<UiEvent>) -> Self {
         Self {
             obj_c_responder: None,
-            global_app_state,
             tx,
-            rx,
         }
     }
 
@@ -64,12 +60,15 @@ impl EventResponder {
 
     pub extern "C" fn menu_selected(this: &Object, _sel: Sel, target: id) {
         let menu_item_id: i64 = unsafe { msg_send![target, tag] };
-        log::info!("Selected menu item: {}", menu_item_id);
         let responder = Self::rust_responder(this);
         let _ = &responder
             .tx
             .send(UiEvent::CopyToClipboard(menu_item_id as u64));
-        responder.drain_events();
+    }
+
+    pub extern "C" fn quit(this: &Object, _sel: Sel) {
+        let responder = Self::rust_responder(this);
+        let _ = &responder.tx.send(UiEvent::Quit);
     }
 
     fn rust_responder(this: &Object) -> &EventResponder {
@@ -79,31 +78,6 @@ impl EventResponder {
                 panic!("Got back a null rust responder pointer. This should never happen!");
             }
             &mut *(responder_ptr as *mut EventResponder)
-        }
-    }
-
-    fn drain_events(&self) {
-        while let Ok(event) = self.rx.try_recv() {
-            log::debug!("Got event: {:?}", event);
-            match event {
-                UiEvent::CopyToClipboard(menu_id) => {
-                    let app_state = self.global_app_state.load();
-                    if let Some(otp_value) = app_state.get_otp_value_at_index(menu_id as usize) {
-                        Self::copy_to_pasteboard(&otp_value.otp);
-                    }
-                }
-                _ => {}
-            }
-        }
-    }
-
-    fn copy_to_pasteboard(contents: &str) {
-        unsafe {
-            let ns_contents = NSString::alloc(nil).init_str(contents).autorelease();
-            let array_contents = NSArray::arrayWithObjects(nil, &[ns_contents]);
-            let pasteboard = NSPasteboard::generalPasteboard(nil);
-            pasteboard.clearContents();
-            pasteboard.writeObjects(array_contents);
         }
     }
 }
@@ -140,7 +114,12 @@ fn build_menu(
                     NSString::alloc(nil).init_str("").autorelease(),
                 )
                 .autorelease();
-            NSMenuItem::setTarget_(entry_item, event_responder.obj_c_responder.expect("No objective-c EventResponder instantiated!"));
+            NSMenuItem::setTarget_(
+                entry_item,
+                event_responder
+                    .obj_c_responder
+                    .expect("No objective-c EventResponder instantiated!"),
+            );
             let _: () = msg_send![entry_item, setTag: i];
             menu.addItem_(entry_item);
         }
@@ -150,22 +129,60 @@ fn build_menu(
         let quit_prefix = NSString::alloc(nil).init_str("Quit ").autorelease();
         let quit_title =
             quit_prefix.stringByAppendingString_(NSProcessInfo::processInfo(nil).processName());
-        let quit_action = selector("terminate:");
+        let quit_action = sel!(quit);
         let quit_key = NSString::alloc(nil).init_str("q").autorelease();
         let quit_item = NSMenuItem::alloc(nil)
             .initWithTitle_action_keyEquivalent_(quit_title, quit_action, quit_key)
             .autorelease();
+        NSMenuItem::setTarget_(quit_item, event_responder.obj_c_responder.unwrap());
         menu.addItem_(quit_item);
 
         (new_app_state, menu)
     }
 }
 
+fn copy_to_pasteboard(contents: &str) {
+    unsafe {
+        let ns_contents = NSString::alloc(nil).init_str(contents).autorelease();
+        let array_contents = NSArray::arrayWithObjects(nil, &[ns_contents]);
+        let pasteboard = NSPasteboard::generalPasteboard(nil);
+        pasteboard.clearContents();
+        pasteboard.writeObjects(array_contents);
+    }
+}
+
+fn drain_events(rx: Receiver<UiEvent>, global_app_state: Arc<AtomicImmut<AppState>>) {
+    while let Ok(event) = rx.recv() {
+        log::debug!("Got event: {:?}", event);
+        match event {
+            UiEvent::CopyToClipboard(menu_id) => {
+                let app_state = global_app_state.load();
+                if let Some(otp_value) = app_state.get_otp_value_at_index(menu_id as usize) {
+                    copy_to_pasteboard(&otp_value.otp);
+                }
+            }
+            UiEvent::Quit => {
+                unsafe {
+                    let app = NSApplication::sharedApplication(nil);
+                    let _: () = msg_send![app, terminate: nil];
+                }
+                return;
+            }
+            _ => {}
+        }
+    }
+}
+
 pub fn ui_main(global_app_state: Arc<AtomicImmut<AppState>>) {
     log::info!("Staring macOS ui main");
     let (tx, rx) = channel();
-    let mut event_responder = EventResponder::new(global_app_state.clone(), tx.clone(), rx);
+    let mut event_responder = EventResponder::new(tx.clone());
     event_responder.instantiate_obj_c_responder();
+
+    let drain_app_state = global_app_state.clone();
+    std::thread::spawn(move || {
+        drain_events(rx, drain_app_state);
+    });
 
     unsafe {
         let app = NSApp();
