@@ -8,7 +8,7 @@ use crate::common::*;
 
 use cocoa::appkit::{
     NSApp, NSApplication, NSApplicationActivationPolicyRegular, NSButton, NSMenu, NSMenuItem,
-    NSPasteboard, NSPasteboardTypeString, NSSquareStatusItemLength, NSStatusBar, NSStatusItem,
+    NSPasteboard, NSSquareStatusItemLength, NSStatusBar, NSStatusItem,
 };
 use cocoa::base::{id, nil};
 use cocoa::foundation::{NSArray, NSAutoreleasePool, NSProcessInfo, NSString};
@@ -38,14 +38,22 @@ lazy_static! {
 
 struct EventResponder {
     obj_c_responder: Option<id>,
+    global_app_state: Arc<AtomicImmut<AppState>>,
     tx: Sender<UiEvent>,
+    rx: Receiver<UiEvent>,
 }
 
 impl EventResponder {
-    fn new(tx: Sender<UiEvent>) -> Self {
+    fn new(
+        global_app_state: Arc<AtomicImmut<AppState>>,
+        tx: Sender<UiEvent>,
+        rx: Receiver<UiEvent>,
+    ) -> Self {
         Self {
             obj_c_responder: None,
+            global_app_state,
             tx,
+            rx,
         }
     }
 
@@ -64,11 +72,15 @@ impl EventResponder {
         let _ = &responder
             .tx
             .send(UiEvent::CopyToClipboard(menu_item_id as u64));
+
+        process_events(responder);
     }
 
     pub extern "C" fn quit(this: &Object, _sel: Sel) {
         let responder = Self::rust_responder(this);
         let _ = &responder.tx.send(UiEvent::Quit);
+
+        process_events(responder);
     }
 
     fn rust_responder(this: &Object) -> &EventResponder {
@@ -92,11 +104,7 @@ impl Drop for EventResponder {
     }
 }
 
-fn build_menu(
-    app_state: Arc<AppState>,
-    event_responder: &mut EventResponder,
-    tx: Sender<UiEvent>,
-) -> (AppState, id) {
+fn build_menu(app_state: Arc<AppState>, event_responder: &EventResponder) -> (AppState, id) {
     let new_app_state = app_state.menu_reset();
     unsafe {
         let menu = NSMenu::new(nil).autorelease();
@@ -151,12 +159,12 @@ fn copy_to_pasteboard(contents: &str) {
     }
 }
 
-fn drain_events(rx: Receiver<UiEvent>, global_app_state: Arc<AtomicImmut<AppState>>) {
-    while let Ok(event) = rx.recv() {
+fn process_events(event_responder: &EventResponder) {
+    while let Ok(event) = event_responder.rx.try_recv() {
         log::debug!("Got event: {:?}", event);
         match event {
             UiEvent::CopyToClipboard(menu_id) => {
-                let app_state = global_app_state.load();
+                let app_state = event_responder.global_app_state.load();
                 if let Some(otp_value) = app_state.get_otp_value_at_index(menu_id as usize) {
                     copy_to_pasteboard(&otp_value.otp);
                 }
@@ -168,6 +176,16 @@ fn drain_events(rx: Receiver<UiEvent>, global_app_state: Arc<AtomicImmut<AppStat
                 }
                 return;
             }
+            UiEvent::TotpRefresh => unsafe {
+                let status_bar = NSStatusBar::systemStatusBar(nil);
+                let status_item = status_bar.statusItemWithLength_(NSSquareStatusItemLength);
+                let status_button = status_item.button();
+                status_button.setTitle_(NSString::alloc(nil).init_str("otp").autorelease());
+                let (app_state, menu) =
+                    build_menu(event_responder.global_app_state.load(), event_responder);
+                status_item.setMenu_(menu);
+                event_responder.global_app_state.store(app_state);
+            },
             _ => {}
         }
     }
@@ -176,28 +194,14 @@ fn drain_events(rx: Receiver<UiEvent>, global_app_state: Arc<AtomicImmut<AppStat
 pub fn ui_main(global_app_state: Arc<AtomicImmut<AppState>>) {
     log::info!("Staring macOS ui main");
     let (tx, rx) = channel();
-    let mut event_responder = EventResponder::new(tx.clone());
+    let mut event_responder = EventResponder::new(global_app_state, tx.clone(), rx);
     event_responder.instantiate_obj_c_responder();
-
-    let drain_app_state = global_app_state.clone();
-    std::thread::spawn(move || {
-        drain_events(rx, drain_app_state);
-    });
 
     unsafe {
         let app = NSApp();
         app.setActivationPolicy_(NSApplicationActivationPolicyRegular);
-
-        let status_bar = NSStatusBar::systemStatusBar(nil);
-        let status_item = status_bar.statusItemWithLength_(NSSquareStatusItemLength);
-        let status_button = status_item.button();
-        status_button.setTitle_(NSString::alloc(nil).init_str("otp").autorelease());
-
-        // TODO: Move to TotpRefresh UIEvent
-        let (app_state, menu) =
-            build_menu(global_app_state.load(), &mut event_responder, tx.clone());
-        status_item.setMenu_(menu);
-
+        let _ = tx.send(UiEvent::TotpRefresh);
+        process_events(&event_responder);
         app.run();
     }
 }
