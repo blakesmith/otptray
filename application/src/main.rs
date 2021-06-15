@@ -9,7 +9,7 @@ use atomic_immut::AtomicImmut;
 use simple_logger::SimpleLogger;
 use std::sync::Arc;
 
-mod common;
+pub mod common;
 
 #[cfg(target_os = "linux")]
 mod linux;
