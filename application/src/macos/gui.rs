@@ -14,18 +14,22 @@ use cocoa::base::{id, nil};
 use cocoa::foundation::{NSArray, NSAutoreleasePool, NSProcessInfo, NSString};
 
 use objc::declare::ClassDecl;
-use objc::runtime::{Class, Object, Sel};
-use objc::{msg_send, sel};
+use objc::runtime::{Class, Object, Sel, YES};
+use objc::{class, msg_send, sel};
 
 lazy_static! {
     static ref EVENT_RESPONDER_CLASS: &'static Class = {
-        let superclass = Class::get("NSObject").unwrap();
+        let superclass = class!(NSObject);
         let mut class_decl = ClassDecl::new("EventResponder", superclass).unwrap();
         unsafe {
             class_decl.add_ivar::<*mut c_void>("rust_responder");
             class_decl.add_method(
                 sel!(menu_selected:),
                 EventResponder::menu_selected as extern "C" fn(&Object, Sel, id),
+            );
+            class_decl.add_method(
+                sel!(totp_refresh),
+                EventResponder::totp_refresh as extern "C" fn(&Object, Sel),
             );
             class_decl.add_method(
                 sel!(quit),
@@ -72,6 +76,13 @@ impl EventResponder {
         let _ = &responder
             .tx
             .send(UiEvent::CopyToClipboard(menu_item_id as u64));
+
+        process_events(responder);
+    }
+
+    pub extern "C" fn totp_refresh(this: &Object, _sel: Sel) {
+        let responder = Self::rust_responder(this);
+        let _ = &responder.tx.send(UiEvent::TotpRefresh);
 
         process_events(responder);
     }
@@ -191,6 +202,17 @@ fn process_events(event_responder: &EventResponder) {
     }
 }
 
+fn start_timer(event_responder: &EventResponder) {
+    unsafe {
+        let _: () = msg_send![class!(NSTimer),
+                              scheduledTimerWithTimeInterval: 5.0
+                              target: event_responder.obj_c_responder.unwrap()
+                              selector: sel!(totp_refresh)
+                              userInfo: nil
+                              repeats: YES];
+    }
+}
+
 pub fn ui_main(global_app_state: Arc<AtomicImmut<AppState>>) {
     log::info!("Staring macOS ui main");
     let (tx, rx) = channel();
@@ -202,6 +224,7 @@ pub fn ui_main(global_app_state: Arc<AtomicImmut<AppState>>) {
         app.setActivationPolicy_(NSApplicationActivationPolicyRegular);
         let _ = tx.send(UiEvent::TotpRefresh);
         process_events(&event_responder);
+        start_timer(&event_responder);
         app.run();
     }
 }
