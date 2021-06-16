@@ -14,6 +14,7 @@ use cocoa::base::{id, nil};
 use cocoa::foundation::{NSArray, NSAutoreleasePool, NSProcessInfo, NSString};
 
 use objc::declare::ClassDecl;
+use objc::rc::StrongPtr;
 use objc::runtime::{Class, Object, Sel, YES};
 use objc::{class, msg_send, sel};
 
@@ -42,6 +43,7 @@ lazy_static! {
 
 struct EventResponder {
     obj_c_responder: Option<id>,
+    status_item: Option<StrongPtr>,
     global_app_state: Arc<AtomicImmut<AppState>>,
     tx: Sender<UiEvent>,
     rx: Receiver<UiEvent>,
@@ -55,6 +57,7 @@ impl EventResponder {
     ) -> Self {
         Self {
             obj_c_responder: None,
+            status_item: None,
             global_app_state,
             tx,
             rx,
@@ -94,7 +97,7 @@ impl EventResponder {
         process_events(responder);
     }
 
-    fn rust_responder(this: &Object) -> &EventResponder {
+    fn rust_responder(this: &Object) -> &mut EventResponder {
         unsafe {
             let responder_ptr = *this.get_ivar::<*mut c_void>("rust_responder");
             if responder_ptr.is_null() {
@@ -170,7 +173,7 @@ fn copy_to_pasteboard(contents: &str) {
     }
 }
 
-fn process_events(event_responder: &EventResponder) {
+fn process_events(event_responder: &mut EventResponder) {
     while let Ok(event) = event_responder.rx.try_recv() {
         log::debug!("Got event: {:?}", event);
         match event {
@@ -188,10 +191,19 @@ fn process_events(event_responder: &EventResponder) {
                 return;
             }
             UiEvent::TotpRefresh => unsafe {
-                let status_bar = NSStatusBar::systemStatusBar(nil);
-                let status_item = status_bar.statusItemWithLength_(NSSquareStatusItemLength);
-                let status_button = status_item.button();
-                status_button.setTitle_(NSString::alloc(nil).init_str("otp").autorelease());
+                let status_item = match &event_responder.status_item {
+                    Some(s) => **s,
+                    None => {
+                        let status_bar = NSStatusBar::systemStatusBar(nil);
+                        let status_item = StrongPtr::retain(
+                            status_bar.statusItemWithLength_(NSSquareStatusItemLength),
+                        );
+                        let status_button = status_item.button();
+                        event_responder.status_item = Some(status_item.clone());
+                        status_button.setTitle_(NSString::alloc(nil).init_str("otp").autorelease());
+                        *status_item
+                    }
+                };
                 let (app_state, menu) =
                     build_menu(event_responder.global_app_state.load(), event_responder);
                 status_item.setMenu_(menu);
@@ -223,7 +235,7 @@ pub fn ui_main(global_app_state: Arc<AtomicImmut<AppState>>) {
         let app = NSApp();
         app.setActivationPolicy_(NSApplicationActivationPolicyRegular);
         let _ = tx.send(UiEvent::TotpRefresh);
-        process_events(&event_responder);
+        process_events(&mut event_responder);
         start_timer(&event_responder);
         app.run();
     }
