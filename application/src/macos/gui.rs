@@ -42,7 +42,7 @@ lazy_static! {
 }
 
 struct EventResponder {
-    obj_c_responder: Option<id>,
+    obj_c_responder: Option<StrongPtr>,
     status_item: Option<StrongPtr>,
     global_app_state: Arc<AtomicImmut<AppState>>,
     tx: Sender<UiEvent>,
@@ -69,8 +69,8 @@ impl EventResponder {
         unsafe {
             let responder_ptr: *mut c_void = self as *mut _ as *mut c_void;
             (&mut *obj_c_responder).set_ivar("rust_responder", responder_ptr);
+            self.obj_c_responder = Some(StrongPtr::new(obj_c_responder));
         }
-        self.obj_c_responder = Some(obj_c_responder);
     }
 
     pub extern "C" fn menu_selected(this: &Object, _sel: Sel, target: id) {
@@ -108,16 +108,6 @@ impl EventResponder {
     }
 }
 
-impl Drop for EventResponder {
-    fn drop(&mut self) {
-        unsafe {
-            if let Some(obj_c_responder) = self.obj_c_responder {
-                obj_c_responder.autorelease();
-            }
-        }
-    }
-}
-
 fn build_menu(app_state: Arc<AppState>, event_responder: &EventResponder) -> (AppState, id) {
     let new_app_state = app_state.menu_reset();
     unsafe {
@@ -138,8 +128,9 @@ fn build_menu(app_state: Arc<AppState>, event_responder: &EventResponder) -> (Ap
                 .autorelease();
             NSMenuItem::setTarget_(
                 entry_item,
-                event_responder
+                **event_responder
                     .obj_c_responder
+                    .as_ref()
                     .expect("No objective-c EventResponder instantiated!"),
             );
             let _: () = msg_send![entry_item, setTag: i];
@@ -156,7 +147,10 @@ fn build_menu(app_state: Arc<AppState>, event_responder: &EventResponder) -> (Ap
         let quit_item = NSMenuItem::alloc(nil)
             .initWithTitle_action_keyEquivalent_(quit_title, quit_action, quit_key)
             .autorelease();
-        NSMenuItem::setTarget_(quit_item, event_responder.obj_c_responder.unwrap());
+        NSMenuItem::setTarget_(
+            quit_item,
+            **event_responder.obj_c_responder.as_ref().unwrap(),
+        );
         menu.addItem_(quit_item);
 
         (new_app_state, menu)
@@ -218,7 +212,7 @@ fn start_timer(event_responder: &EventResponder) {
     unsafe {
         let _: () = msg_send![class!(NSTimer),
                               scheduledTimerWithTimeInterval: 5.0
-                              target: event_responder.obj_c_responder.unwrap()
+                              target: **event_responder.obj_c_responder.as_ref().unwrap()
                               selector: sel!(totp_refresh)
                               userInfo: nil
                               repeats: YES];
