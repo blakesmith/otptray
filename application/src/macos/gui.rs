@@ -108,6 +108,22 @@ impl EventResponder {
     }
 }
 
+fn build_menu_item(name: &str, action: SEL, target: id) -> NSMenuItem {
+    let menu_item_prefix = NSString::alloc(nil).init_str(name).autorelease();
+    let menu_item_title =
+        menu_item_prefix.stringByAppendingString_(NSProcessInfo::processInfo(nil).processName());
+    let menu_item_action = sel!(menu_item);
+    let menu_item_key = NSString::alloc(nil).init_str("").autorelease();
+    let menu_item = NSMenuItem::alloc(nil)
+        .initWithTitle_action_keyEquivalent_(menu_item_title, menu_item_action, menu_item_key)
+        .autorelease();
+    NSMenuItem::setTarget_(
+        menu_item,
+        **event_responder.obj_c_responder.as_ref().unwrap(),
+    );
+    menu_item
+}
+
 fn build_menu(app_state: Arc<AppState>, event_responder: &EventResponder) -> (AppState, id) {
     let new_app_state = app_state.menu_reset();
     unsafe {
@@ -139,16 +155,9 @@ fn build_menu(app_state: Arc<AppState>, event_responder: &EventResponder) -> (Ap
 
         menu.addItem_(NSMenuItem::separatorItem(nil));
 
-        let quit_prefix = NSString::alloc(nil).init_str("Quit ").autorelease();
-        let quit_title =
-            quit_prefix.stringByAppendingString_(NSProcessInfo::processInfo(nil).processName());
-        let quit_action = sel!(quit);
-        let quit_key = NSString::alloc(nil).init_str("q").autorelease();
-        let quit_item = NSMenuItem::alloc(nil)
-            .initWithTitle_action_keyEquivalent_(quit_title, quit_action, quit_key)
-            .autorelease();
-        NSMenuItem::setTarget_(
-            quit_item,
+        let quit_item = build_menu_item(
+            "Quit",
+            sel!(quit),
             **event_responder.obj_c_responder.as_ref().unwrap(),
         );
         menu.addItem_(quit_item);
