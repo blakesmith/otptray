@@ -8,7 +8,7 @@ BIN=target/release/$(APPLICATION)
 RUST_SOURCES := $(shell find src -name '*.rs')
 
 UBUNTU_FOCAL_PKG=$(PACKAGE_DIR)_focal.deb
-UBUNTU_GROOVY_PKG=$(PACKAGE_DIR)_groovy.deb
+UBUNTU_HIRSUTE_PKG=$(PACKAGE_DIR)_hirsute.deb
 
 $(UBUNTU_FOCAL_PKG):
 	vagrant up focal64-build
@@ -16,11 +16,11 @@ $(UBUNTU_FOCAL_PKG):
 	mv $(DEB) $@
 focal: $(UBUNTU_FOCAL_PKG)
 
-$(UBUNTU_GROOVY_PKG):
-	vagrant up groovy64-build
-	vagrant ssh groovy64-build -c 'cd /vagrant && make deep_clean all'
+$(UBUNTU_HIRSUTE_PKG):
+	vagrant up hirsute64-build
+	vagrant ssh hirsute64-build -c 'cd /vagrant && make deep_clean all'
 	mv $(DEB) $@
-groovy: $(UBUNTU_GROOVY_PKG)
+hirsute: $(UBUNTU_HIRSUTE_PKG)
 
 all: $(DEB)
 
@@ -38,9 +38,9 @@ $(DEB): $(PACKAGE_DIR)
 	dpkg-deb --build $(PACKAGE_DIR)
 
 clean:
-	rm -rf $(PACKAGE_DIR) $(DEB)
+	rm -rf $(PACKAGE_DIR) *.deb
 
 deep_clean: clean
 	cargo clean
 
-.PHONY: clean deep_clean all groovy focal
+.PHONY: clean deep_clean all hirsute focal
