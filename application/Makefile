@@ -5,6 +5,9 @@ DEB_DIR=deb
 DEB=$(PACKAGE_DIR).deb
 BIN=target/release/$(APPLICATION)
 
+MACOS=macos
+MACOS_APP=OTPTray.app
+
 RUST_SOURCES := $(shell find src -name '*.rs')
 
 UBUNTU_FOCAL_PKG=$(PACKAGE_DIR)_focal.deb
@@ -37,8 +40,14 @@ $(PACKAGE_DIR): $(BIN)
 $(DEB): $(PACKAGE_DIR)
 	dpkg-deb --build $(PACKAGE_DIR)
 
+$(MACOS_APP): $(BIN)
+	mkdir -p $(MACOS_APP)/Contents/MacOS
+	mkdir -p $(MACOS_APP)/Contents/Resources
+	cp $(BIN) $(MACOS_APP)/Contents/MacOS
+	cp $(MACOS)/Info.plist $(MACOS_APP)/Info.plist
+
 clean:
-	rm -rf $(PACKAGE_DIR) $(DEB)
+	rm -rf $(PACKAGE_DIR) $(DEB) $(MACOS_APP)
 
 deep_clean: clean
 	cargo clean

@@ -2,3 +2,5 @@ application/target
 *.deb
 otptray*_amd64
 .vagrant
+.DS_Store
+*.app
