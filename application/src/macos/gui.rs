@@ -10,8 +10,8 @@ use cocoa::appkit::{
     NSApp, NSApplication, NSApplicationActivationPolicyRegular, NSButton, NSMenu, NSMenuItem,
     NSPasteboard, NSSquareStatusItemLength, NSStatusBar, NSStatusItem,
 };
-use cocoa::base::{id, nil};
-use cocoa::foundation::{NSArray, NSAutoreleasePool, NSProcessInfo, NSString};
+use cocoa::base::{id, nil, SEL};
+use cocoa::foundation::{NSArray, NSAutoreleasePool, NSString};
 
 use objc::declare::ClassDecl;
 use objc::rc::StrongPtr;
@@ -31,6 +31,10 @@ lazy_static! {
             class_decl.add_method(
                 sel!(totp_refresh),
                 EventResponder::totp_refresh as extern "C" fn(&Object, Sel),
+            );
+            class_decl.add_method(
+                sel!(setup),
+                EventResponder::setup as extern "C" fn(&Object, Sel),
             );
             class_decl.add_method(
                 sel!(quit),
@@ -90,6 +94,13 @@ impl EventResponder {
         process_events(responder);
     }
 
+    pub extern "C" fn setup(this: &Object, _sel: Sel) {
+        let responder = Self::rust_responder(this);
+        let _ = &responder.tx.send(UiEvent::OpenSetup);
+
+        process_events(responder);
+    }
+
     pub extern "C" fn quit(this: &Object, _sel: Sel) {
         let responder = Self::rust_responder(this);
         let _ = &responder.tx.send(UiEvent::Quit);
@@ -105,6 +116,18 @@ impl EventResponder {
             }
             &mut *(responder_ptr as *mut EventResponder)
         }
+    }
+}
+
+fn build_menu_item(name: &str, action: SEL, target: id) -> id {
+    unsafe {
+        let menu_item_title = NSString::alloc(nil).init_str(name).autorelease();
+        let menu_item_key = NSString::alloc(nil).init_str("").autorelease();
+        let menu_item = NSMenuItem::alloc(nil)
+            .initWithTitle_action_keyEquivalent_(menu_item_title, action, menu_item_key)
+            .autorelease();
+        NSMenuItem::setTarget_(menu_item, target);
+        menu_item
     }
 }
 
@@ -139,18 +162,17 @@ fn build_menu(app_state: Arc<AppState>, event_responder: &EventResponder) -> (Ap
 
         menu.addItem_(NSMenuItem::separatorItem(nil));
 
-        let quit_prefix = NSString::alloc(nil).init_str("Quit ").autorelease();
-        let quit_title =
-            quit_prefix.stringByAppendingString_(NSProcessInfo::processInfo(nil).processName());
-        let quit_action = sel!(quit);
-        let quit_key = NSString::alloc(nil).init_str("q").autorelease();
-        let quit_item = NSMenuItem::alloc(nil)
-            .initWithTitle_action_keyEquivalent_(quit_title, quit_action, quit_key)
-            .autorelease();
-        NSMenuItem::setTarget_(
-            quit_item,
+        let setup_item = build_menu_item(
+            "Setup",
+            sel!(setup),
             **event_responder.obj_c_responder.as_ref().unwrap(),
         );
+        let quit_item = build_menu_item(
+            "Quit",
+            sel!(quit),
+            **event_responder.obj_c_responder.as_ref().unwrap(),
+        );
+        menu.addItem_(setup_item);
         menu.addItem_(quit_item);
 
         (new_app_state, menu)
@@ -176,6 +198,9 @@ fn process_events(event_responder: &mut EventResponder) {
                 if let Some(otp_value) = app_state.get_otp_value_at_index(menu_id as usize) {
                     copy_to_pasteboard(&otp_value.otp);
                 }
+            }
+            UiEvent::OpenSetup => {
+                log::info!("About to open setup window");
             }
             UiEvent::Quit => {
                 unsafe {
