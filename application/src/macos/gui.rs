@@ -7,15 +7,16 @@ use std::sync::Arc;
 use crate::common::*;
 
 use cocoa::appkit::{
-    NSApp, NSApplication, NSApplicationActivationPolicyRegular, NSButton, NSMenu, NSMenuItem,
-    NSPasteboard, NSSquareStatusItemLength, NSStatusBar, NSStatusItem,
+    NSApp, NSApplication, NSApplicationActivationPolicyRegular, NSBackingStoreType, NSButton,
+    NSMenu, NSMenuItem, NSPasteboard, NSSquareStatusItemLength, NSStatusBar, NSStatusItem,
+    NSWindow, NSWindowStyleMask,
 };
 use cocoa::base::{id, nil, SEL};
-use cocoa::foundation::{NSArray, NSAutoreleasePool, NSString};
+use cocoa::foundation::{NSArray, NSAutoreleasePool, NSPoint, NSRect, NSSize, NSString};
 
 use objc::declare::ClassDecl;
 use objc::rc::StrongPtr;
-use objc::runtime::{Class, Object, Sel, YES};
+use objc::runtime::{Class, Object, Sel, NO, YES};
 use objc::{class, msg_send, sel};
 
 lazy_static! {
@@ -119,6 +120,38 @@ impl EventResponder {
     }
 }
 
+fn setup_window(_app_state: Arc<AppState>) -> id {
+    unsafe {
+        let mut window_mask = NSWindowStyleMask::empty();
+        window_mask.insert(NSWindowStyleMask::NSTitledWindowMask);
+        window_mask.insert(NSWindowStyleMask::NSClosableWindowMask);
+        window_mask.insert(NSWindowStyleMask::NSResizableWindowMask);
+        let window = NSWindow::alloc(nil).initWithContentRect_styleMask_backing_defer_(
+            NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(250.0, 200.0)),
+            window_mask,
+            NSBackingStoreType::NSBackingStoreBuffered,
+            NO,
+        );
+        window.center();
+        NSWindow::setTitle_(
+            window,
+            NSString::alloc(nil).init_str("OTPTray Setup").autorelease(),
+        );
+
+        let label = cocoa::appkit::NSTextField::alloc(nil).initWithFrame_(NSRect::new(
+            NSPoint::new(30.0, 30.0),
+            NSSize::new(80.0, 30.0),
+        ));
+        cocoa::appkit::NSTextField::setStringValue_(
+            label,
+            NSString::alloc(nil).init_str("Some label").autorelease(),
+        );
+        cocoa::appkit::NSView::addSubview_(window.contentView(), label);
+        label.autorelease();
+        window
+    }
+}
+
 fn build_menu_item(name: &str, action: SEL, target: id) -> id {
     unsafe {
         let menu_item_title = NSString::alloc(nil).init_str(name).autorelease();
@@ -199,9 +232,13 @@ fn process_events(event_responder: &mut EventResponder) {
                     copy_to_pasteboard(&otp_value.otp);
                 }
             }
-            UiEvent::OpenSetup => {
-                log::info!("About to open setup window");
-            }
+            UiEvent::OpenSetup => unsafe {
+                let app = NSApplication::sharedApplication(nil);
+                let window = setup_window(event_responder.global_app_state.load());
+                NSApplication::activateIgnoringOtherApps_(app, YES);
+                window.makeKeyAndOrderFront_(app);
+                // TODO: Don't leak the window!
+            },
             UiEvent::Quit => {
                 unsafe {
                     let app = NSApplication::sharedApplication(nil);
@@ -219,7 +256,10 @@ fn process_events(event_responder: &mut EventResponder) {
                         );
                         let status_button = status_item.button();
                         event_responder.status_item = Some(status_item.clone());
-                        status_button.setTitle_(NSString::alloc(nil).init_str("otp").autorelease());
+                        NSButton::setTitle_(
+                            status_button,
+                            NSString::alloc(nil).init_str("otp").autorelease(),
+                        );
                         *status_item
                     }
                 };
