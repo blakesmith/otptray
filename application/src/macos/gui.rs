@@ -121,7 +121,16 @@ impl EventResponder {
     }
 }
 
-fn setup_window(_app_state: Arc<AppState>) -> id {
+fn setup_page(app_state: &AppState) -> id {
+    unsafe {
+        let table_view: id = msg_send![class!(NSTableView), alloc];
+        let _: () = msg_send![table_view, initWithFrame: NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(250.0, 200.0))];
+        table_view.autorelease();
+        table_view
+    }
+}
+
+fn setup_window(app_state: Arc<AppState>) -> id {
     unsafe {
         let mut window_mask = NSWindowStyleMask::empty();
         window_mask.insert(NSWindowStyleMask::NSTitledWindowMask);
@@ -148,6 +157,7 @@ fn setup_window(_app_state: Arc<AppState>) -> id {
             .initWithIdentifier_(nil)
             .autorelease();
         setup_item.setLabel_(NSString::alloc(nil).init_str("Setup").autorelease());
+        setup_item.setView_(setup_page(&app_state));
         tab_view.addTabViewItem_(setup_item);
 
         let about_item = NSTabViewItem::alloc(nil)
