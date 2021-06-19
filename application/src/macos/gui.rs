@@ -9,7 +9,7 @@ use crate::common::*;
 use cocoa::appkit::{
     NSApp, NSApplication, NSApplicationActivationPolicyRegular, NSBackingStoreType, NSButton,
     NSMenu, NSMenuItem, NSPasteboard, NSSquareStatusItemLength, NSStatusBar, NSStatusItem,
-    NSWindow, NSWindowStyleMask,
+    NSTabView, NSTabViewItem, NSView, NSWindow, NSWindowStyleMask,
 };
 use cocoa::base::{id, nil, SEL};
 use cocoa::foundation::{NSArray, NSAutoreleasePool, NSPoint, NSRect, NSSize, NSString};
@@ -138,16 +138,25 @@ fn setup_window(_app_state: Arc<AppState>) -> id {
             NSString::alloc(nil).init_str("OTPTray Setup").autorelease(),
         );
 
-        let label = cocoa::appkit::NSTextField::alloc(nil).initWithFrame_(NSRect::new(
-            NSPoint::new(30.0, 30.0),
-            NSSize::new(80.0, 30.0),
-        ));
-        cocoa::appkit::NSTextField::setStringValue_(
-            label,
-            NSString::alloc(nil).init_str("Some label").autorelease(),
-        );
-        cocoa::appkit::NSView::addSubview_(window.contentView(), label);
-        label.autorelease();
+        let tab_view = NSTabView::initWithFrame_(
+            NSTabView::new(nil),
+            NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(250.0, 200.0)),
+        )
+        .autorelease();
+        let setup_item = NSTabViewItem::alloc(nil)
+            .initWithIdentifier_(nil)
+            .autorelease();
+        setup_item.setLabel_(NSString::alloc(nil).init_str("Setup").autorelease());
+        tab_view.addTabViewItem_(setup_item);
+
+        let about_item = NSTabViewItem::alloc(nil)
+            .initWithIdentifier_(nil)
+            .autorelease();
+        about_item.setLabel_(NSString::alloc(nil).init_str("About").autorelease());
+        tab_view.addTabViewItem_(about_item);
+
+        NSView::addSubview_(window.contentView(), tab_view);
+
         window
     }
 }
