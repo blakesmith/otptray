@@ -9,7 +9,8 @@ use crate::common::*;
 use cocoa::appkit::{
     NSApp, NSApplication, NSApplicationActivationPolicyRegular, NSBackingStoreType, NSButton,
     NSMenu, NSMenuItem, NSPasteboard, NSSquareStatusItemLength, NSStatusBar, NSStatusItem,
-    NSTabView, NSTabViewItem, NSView, NSWindow, NSWindowStyleMask,
+    NSTabView, NSTabViewItem, NSView, NSViewHeightSizable, NSViewWidthSizable, NSWindow,
+    NSWindowStyleMask,
 };
 use cocoa::base::{id, nil, SEL};
 use cocoa::foundation::{NSArray, NSAutoreleasePool, NSPoint, NSRect, NSSize, NSString};
@@ -155,6 +156,7 @@ fn setup_window(_app_state: Arc<AppState>) -> id {
         about_item.setLabel_(NSString::alloc(nil).init_str("About").autorelease());
         tab_view.addTabViewItem_(about_item);
 
+        NSView::setAutoresizingMask_(tab_view, NSViewWidthSizable | NSViewHeightSizable);
         NSView::addSubview_(window.contentView(), tab_view);
 
         window
