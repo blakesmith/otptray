@@ -121,10 +121,10 @@ impl EventResponder {
     }
 }
 
-fn setup_page(app_state: &AppState) -> id {
+fn setup_page(app_state: &AppState, frame: NSRect) -> id {
     unsafe {
         let table_view: id = msg_send![class!(NSTableView), alloc];
-        let _: () = msg_send![table_view, initWithFrame: NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(250.0, 200.0))];
+        let _: () = msg_send![table_view, initWithFrame: frame];
         table_view.autorelease();
         table_view
     }
@@ -136,8 +136,9 @@ fn setup_window(app_state: Arc<AppState>) -> id {
         window_mask.insert(NSWindowStyleMask::NSTitledWindowMask);
         window_mask.insert(NSWindowStyleMask::NSClosableWindowMask);
         window_mask.insert(NSWindowStyleMask::NSResizableWindowMask);
+        let content_frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(250.0, 200.0));
         let window = NSWindow::alloc(nil).initWithContentRect_styleMask_backing_defer_(
-            NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(250.0, 200.0)),
+            content_frame,
             window_mask,
             NSBackingStoreType::NSBackingStoreBuffered,
             NO,
@@ -148,16 +149,12 @@ fn setup_window(app_state: Arc<AppState>) -> id {
             NSString::alloc(nil).init_str("OTPTray Setup").autorelease(),
         );
 
-        let tab_view = NSTabView::initWithFrame_(
-            NSTabView::new(nil),
-            NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(250.0, 200.0)),
-        )
-        .autorelease();
+        let tab_view = NSTabView::initWithFrame_(NSTabView::new(nil), content_frame).autorelease();
         let setup_item = NSTabViewItem::alloc(nil)
             .initWithIdentifier_(nil)
             .autorelease();
         setup_item.setLabel_(NSString::alloc(nil).init_str("Setup").autorelease());
-        setup_item.setView_(setup_page(&app_state));
+        setup_item.setView_(setup_page(&app_state, content_frame));
         tab_view.addTabViewItem_(setup_item);
 
         let about_item = NSTabViewItem::alloc(nil)
