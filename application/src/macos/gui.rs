@@ -21,11 +21,14 @@ use objc::runtime::{Class, Object, Sel, NO, YES};
 use objc::{class, msg_send, sel};
 
 lazy_static! {
+    /// This is the event target that we use to translate
+    /// high level UI events between Rust and Objective-C
+    /// events.
     static ref EVENT_RESPONDER_CLASS: &'static Class = {
-        let superclass = class!(NSObject);
-        let mut class_decl = ClassDecl::new("EventResponder", superclass).unwrap();
+        let mut class_decl = ClassDecl::new("EventResponder", class!(NSObject)).unwrap();
+        class_decl.add_ivar::<*mut c_void>("rust_responder");
+
         unsafe {
-            class_decl.add_ivar::<*mut c_void>("rust_responder");
             class_decl.add_method(
                 sel!(menu_selected:),
                 EventResponder::menu_selected as extern "C" fn(&Object, Sel, id),
@@ -118,6 +121,48 @@ impl EventResponder {
             }
             &mut *(responder_ptr as *mut EventResponder)
         }
+    }
+}
+
+lazy_static! {
+    /// This is the required NSTableViewDataSource class that we need
+    /// to populate the NSTableView for the OTP list during setup / configuration.
+    static ref OTP_SETUP_LIST_CLASS: &'static Class = {
+        let mut class_decl = ClassDecl::new("OtpSetupList", class!(NSObject)).unwrap();
+        class_decl.add_ivar::<*mut c_void>("rust_otp_list");
+
+        unsafe {
+            class_decl.add_method(
+                sel!(numberOfRowsIn:),
+                OtpSetupList::number_of_rows_in as extern "C" fn(&Object, Sel, id),
+            );
+
+            class_decl.add_method(
+                sel!(tableView:objectValueFor:row:),
+                OtpSetupList::table_view as extern "C" fn(&Object, Sel, id, id, i64),
+            );
+        }
+        class_decl.register()
+    };
+}
+
+struct OtpSetupList {
+    app_state: Arc<AppState>,
+    obj_c_otp_list: Option<StrongPtr>,
+}
+
+impl OtpSetupList {
+    /// Return the row count of the table
+    pub extern "C" fn number_of_rows_in(_this: &Object, _sel: Sel, _table_view: id) {}
+
+    /// Fetch the data at the particular row and column
+    pub extern "C" fn table_view(
+        _this: &Object,
+        _sel: Sel,
+        _table_view: id,
+        _object_value_for: id,
+        _row: i64,
+    ) {
     }
 }
 
