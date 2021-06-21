@@ -129,16 +129,16 @@ lazy_static! {
     /// to populate the NSTableView for the OTP list during setup / configuration.
     static ref OTP_SETUP_LIST_CLASS: &'static Class = {
         let mut class_decl = ClassDecl::new("OtpSetupList", class!(NSObject)).unwrap();
-        class_decl.add_ivar::<*mut c_void>("rust_otp_list");
+        class_decl.add_ivar::<*mut c_void>("rust_otp_setup_list");
 
         unsafe {
             class_decl.add_method(
-                sel!(numberOfRowsIn:),
-                OtpSetupList::number_of_rows_in as extern "C" fn(&Object, Sel, id),
+                sel!(numberOfRowsInTableView:),
+                OtpSetupList::number_of_rows_in as extern "C" fn(&Object, Sel, id) -> i64,
             );
 
             class_decl.add_method(
-                sel!(tableView:objectValueFor:row:),
+                sel!(tableView:objectValueForColumnRow:row:),
                 OtpSetupList::table_view as extern "C" fn(&Object, Sel, id, id, i64),
             );
         }
@@ -148,12 +148,23 @@ lazy_static! {
 
 struct OtpSetupList {
     app_state: Arc<AppState>,
-    obj_c_otp_list: Option<StrongPtr>,
+    obj_c_setup_list: Option<StrongPtr>,
 }
 
 impl OtpSetupList {
+    fn instantiate_obj_c_setup_list(&mut self) {
+        let obj_c_setup_list: id = unsafe { msg_send![*OTP_SETUP_LIST_CLASS, new] };
+        unsafe {
+            let otp_setup_list_ptr: *mut c_void = self as *mut _ as *mut c_void;
+            (&mut *obj_c_setup_list).set_ivar("rust_otp_setup_list", otp_setup_list_ptr);
+            self.obj_c_setup_list = Some(StrongPtr::new(obj_c_setup_list));
+        }
+    }
+
     /// Return the row count of the table
-    pub extern "C" fn number_of_rows_in(_this: &Object, _sel: Sel, _table_view: id) {}
+    pub extern "C" fn number_of_rows_in(_this: &Object, _sel: Sel, _table_view: id) -> i64 {
+        return 0;
+    }
 
     /// Fetch the data at the particular row and column
     pub extern "C" fn table_view(
@@ -170,6 +181,17 @@ fn setup_page(app_state: &AppState, frame: NSRect) -> id {
     unsafe {
         let table_view: id = msg_send![class!(NSTableView), alloc];
         let _: () = msg_send![table_view, initWithFrame: frame];
+
+        // TODO: Manage the data source lifecycle better
+        let data_source: id = msg_send![*OTP_SETUP_LIST_CLASS, new];
+        data_source.autorelease();
+        let _: () = msg_send![table_view, setDataSource: data_source];
+
+        let column: id = msg_send![class!(NSTableColumn), new];
+        let _: () =
+            msg_send![column, setTitle: NSString::alloc(nil).init_str("Name").autorelease() ];
+        column.autorelease();
+
         table_view.autorelease();
         table_view
     }
