@@ -139,7 +139,7 @@ lazy_static! {
 
             class_decl.add_method(
                 sel!(tableView:objectValueForTableColumn:row:),
-                OtpSetupList::table_view as extern "C" fn(&Object, Sel, id, id, i64) -> id,
+                OtpSetupList::table_view_object_value_for as extern "C" fn(&Object, Sel, id, id, i64) -> id,
             );
         }
         class_decl.register()
@@ -163,30 +163,17 @@ impl OtpSetupList {
 
     /// Return the row count of the table
     pub extern "C" fn number_of_rows_in(_this: &Object, _sel: Sel, _table_view: id) -> i64 {
-        log::info!("Got number of rows");
-        return 1;
+        return 10;
     }
 
-    /// Fetch the data at the particular row and column
-    pub extern "C" fn table_view(
+    pub extern "C" fn table_view_object_value_for(
         _this: &Object,
         _sel: Sel,
         table_view: id,
-        _object_value_for: id,
-        _row: i64,
+        _tabe_column: id,
+        row: i64,
     ) -> id {
-        log::info!("Tried to fetch a cell");
-        unsafe {
-            let cell_identifier = NSString::alloc(nil).init_str("").autorelease();
-            let cell: id = msg_send![
-                table_view,
-                makeViewWithIdentifier: cell_identifier
-                    owner: nil
-            ];
-            let text_field: id = msg_send![cell, getTextField];
-            let _: () = msg_send![text_field, setStringValue: NSString::alloc(nil).init_str("A cell!").autorelease()];
-            return cell;
-        }
+        unsafe { NSString::alloc(nil).init_str(&format!("row-{}", row)) }
     }
 }
 
@@ -197,12 +184,11 @@ fn setup_page(app_state: &AppState, frame: NSRect) -> id {
 
         // TODO: Manage the data source lifecycle better
         let data_source: id = msg_send![*OTP_SETUP_LIST_CLASS, new];
-        data_source.autorelease();
         let _: () = msg_send![table_view, setDataSource: data_source];
+        let _: () = msg_send![table_view, setDelegate: data_source];
 
-        let column: id = msg_send![class!(NSTableColumn), new];
-        let _: () =
-            msg_send![column, setTitle: NSString::alloc(nil).init_str("Name").autorelease() ];
+        let column: id = msg_send![class!(NSTableColumn), alloc];
+        let _: () = msg_send![column, initWithIdentifier: NSString::alloc(nil).init_str("Name").autorelease() ];
         column.autorelease();
 
         let _: () = msg_send![table_view, addTableColumn: column];
