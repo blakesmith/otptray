@@ -386,7 +386,6 @@ pub fn ui_main(global_app_state: Arc<AtomicImmut<AppState>>) {
 
     unsafe {
         let app = NSApp();
-        app.setActivationPolicy_(NSApplicationActivationPolicyRegular);
         let _ = tx.send(UiEvent::TotpRefresh);
         process_events(&mut event_responder);
         start_timer(&event_responder);

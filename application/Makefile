@@ -44,7 +44,7 @@ $(MACOS_APP): $(BIN)
 	mkdir -p $(MACOS_APP)/Contents/MacOS
 	mkdir -p $(MACOS_APP)/Contents/Resources
 	cp $(BIN) $(MACOS_APP)/Contents/MacOS
-	cp $(MACOS)/Info.plist $(MACOS_APP)/Info.plist
+	cp $(MACOS)/Info.plist $(MACOS_APP)/Contents/Info.plist
 
 clean:
 	rm -rf $(PACKAGE_DIR) *.deb $(MACOS_APP)
