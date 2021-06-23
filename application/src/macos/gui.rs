@@ -179,8 +179,13 @@ impl OtpSetupList {
 
 fn setup_page(app_state: &AppState, frame: NSRect) -> id {
     unsafe {
+        let scroll_view: id = msg_send![class!(NSScrollView), alloc];
+        let _: () = msg_send![scroll_view, initWithFrame: frame];
+
         let table_view: id = msg_send![class!(NSTableView), alloc];
         let _: () = msg_send![table_view, initWithFrame: frame];
+        let _: () = msg_send![table_view, setHeaderView: nil];
+        let _: () = msg_send![scroll_view, setDocumentView: table_view];
 
         // TODO: Manage the data source lifecycle better
         let data_source: id = msg_send![*OTP_SETUP_LIST_CLASS, new];
@@ -189,12 +194,15 @@ fn setup_page(app_state: &AppState, frame: NSRect) -> id {
 
         let column: id = msg_send![class!(NSTableColumn), alloc];
         let _: () = msg_send![column, initWithIdentifier: NSString::alloc(nil).init_str("Name").autorelease() ];
+        let _: () =
+            msg_send![column, setTitle: NSString::alloc(nil).init_str("Name").autorelease() ];
         column.autorelease();
 
         let _: () = msg_send![table_view, addTableColumn: column];
 
+        scroll_view.autorelease();
         table_view.autorelease();
-        table_view
+        scroll_view
     }
 }
 
