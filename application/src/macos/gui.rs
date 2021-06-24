@@ -205,6 +205,7 @@ fn setup_page(otp_setup_list: &OtpSetupList, frame: NSRect) -> id {
         let table_box: id = msg_send![class!(NSBox), alloc];
         let _: () = msg_send![table_box, initWithFrame: frame];
         let _: () = msg_send![table_box, setTitle: NSString::alloc(nil).init_str("One-Time Password Setup").autorelease() ];
+        let _: () = msg_send![table_box, setBorderType: 0]; // NSBorderType.noBorder
         table_box.autorelease();
 
         let scroll_view: id = msg_send![class!(NSScrollView), alloc];
