@@ -171,19 +171,34 @@ impl OtpSetupList {
         }
     }
 
+    fn rust_setup_list(this: &Object) -> &OtpSetupList {
+        unsafe {
+            let setup_list_ptr = *this.get_ivar::<*mut c_void>("rust_otp_setup_list");
+            if setup_list_ptr.is_null() {
+                panic!("Got back a null rust OTP Setup list pointer. This should never happen!");
+            }
+            &*(setup_list_ptr as *const OtpSetupList)
+        }
+    }
+
     /// Return the row count of the table
-    pub extern "C" fn number_of_rows_in(_this: &Object, _sel: Sel, _table_view: id) -> i64 {
-        return 10;
+    pub extern "C" fn number_of_rows_in(this: &Object, _sel: Sel, _table_view: id) -> i64 {
+        let setup_list = Self::rust_setup_list(this);
+        let app_state = setup_list.global_app_state.load();
+        app_state.otp_entries.len() as i64
     }
 
     pub extern "C" fn table_view_object_value_for(
-        _this: &Object,
+        this: &Object,
         _sel: Sel,
-        table_view: id,
+        _table_view: id,
         _tabe_column: id,
         row: i64,
     ) -> id {
-        unsafe { NSString::alloc(nil).init_str(&format!("row-{}", row)) }
+        let setup_list = Self::rust_setup_list(this);
+        let app_state = setup_list.global_app_state.load();
+        let otp_entry = &app_state.otp_entries[row as usize];
+        unsafe { NSString::alloc(nil).init_str(&otp_entry.name) }
     }
 }
 
