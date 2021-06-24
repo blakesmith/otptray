@@ -64,7 +64,7 @@ impl EventResponder {
         tx: Sender<UiEvent>,
         rx: Receiver<UiEvent>,
     ) -> Self {
-        let otp_setup_list = OtpSetupList::new(global_app_state.clone());
+        let otp_setup_list = OtpSetupList::new(global_app_state.load());
         Self {
             obj_c_responder: None,
             status_item: None,
@@ -150,14 +150,14 @@ lazy_static! {
 }
 
 struct OtpSetupList {
-    global_app_state: Arc<AtomicImmut<AppState>>,
+    app_state: Arc<AppState>,
     obj_c_setup_list: Option<StrongPtr>,
 }
 
 impl OtpSetupList {
-    fn new(global_app_state: Arc<AtomicImmut<AppState>>) -> Self {
+    fn new(app_state: Arc<AppState>) -> Self {
         Self {
-            global_app_state,
+            app_state,
             obj_c_setup_list: None,
         }
     }
@@ -184,8 +184,7 @@ impl OtpSetupList {
     /// Return the row count of the table
     pub extern "C" fn number_of_rows_in(this: &Object, _sel: Sel, _table_view: id) -> i64 {
         let setup_list = Self::rust_setup_list(this);
-        let app_state = setup_list.global_app_state.load();
-        app_state.otp_entries.len() as i64
+        setup_list.app_state.otp_entries.len() as i64
     }
 
     pub extern "C" fn table_view_object_value_for(
@@ -196,8 +195,7 @@ impl OtpSetupList {
         row: i64,
     ) -> id {
         let setup_list = Self::rust_setup_list(this);
-        let app_state = setup_list.global_app_state.load();
-        let otp_entry = &app_state.otp_entries[row as usize];
+        let otp_entry = &setup_list.app_state.otp_entries[row as usize];
         unsafe { NSString::alloc(nil).init_str(&otp_entry.name) }
     }
 }
