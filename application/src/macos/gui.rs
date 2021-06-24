@@ -356,7 +356,8 @@ fn process_events(event_responder: &mut EventResponder) {
                 let window = setup_window(&event_responder.otp_setup_list);
                 NSApplication::activateIgnoringOtherApps_(app, YES);
                 window.makeKeyAndOrderFront_(app);
-                // TODO: Don't leak the window!
+                // Windows should automatically get released upon close
+                // See: 'releaseWhenClosed' property.
             },
             UiEvent::Quit => {
                 unsafe {
