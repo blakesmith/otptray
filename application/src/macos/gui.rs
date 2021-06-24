@@ -202,13 +202,20 @@ impl OtpSetupList {
 
 fn setup_page(otp_setup_list: &OtpSetupList, frame: NSRect) -> id {
     unsafe {
+        let table_box: id = msg_send![class!(NSBox), alloc];
+        let _: () = msg_send![table_box, initWithFrame: frame];
+        let _: () = msg_send![table_box, setTitle: NSString::alloc(nil).init_str("One-Time Password Setup").autorelease() ];
+        table_box.autorelease();
+
         let scroll_view: id = msg_send![class!(NSScrollView), alloc];
         let _: () = msg_send![scroll_view, initWithFrame: frame];
+        scroll_view.autorelease();
 
         let table_view: id = msg_send![class!(NSTableView), alloc];
         let _: () = msg_send![table_view, initWithFrame: frame];
         let _: () = msg_send![table_view, setHeaderView: nil];
         let _: () = msg_send![scroll_view, setDocumentView: table_view];
+        let _: () = msg_send![table_box, setContentView: scroll_view];
 
         let otp_objc = otp_setup_list
             .obj_c_setup_list
@@ -216,6 +223,7 @@ fn setup_page(otp_setup_list: &OtpSetupList, frame: NSRect) -> id {
             .expect("Must have instantiated the OTP setup list by now!");
         let _: () = msg_send![table_view, setDataSource: **otp_objc];
         let _: () = msg_send![table_view, setDelegate: **otp_objc];
+        table_view.autorelease();
 
         let column: id = msg_send![class!(NSTableColumn), alloc];
         let _: () = msg_send![column, initWithIdentifier: NSString::alloc(nil).init_str("Name").autorelease() ];
@@ -225,9 +233,7 @@ fn setup_page(otp_setup_list: &OtpSetupList, frame: NSRect) -> id {
 
         let _: () = msg_send![table_view, addTableColumn: column];
 
-        scroll_view.autorelease();
-        table_view.autorelease();
-        scroll_view
+        table_box
     }
 }
 
