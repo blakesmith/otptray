@@ -7,10 +7,9 @@ use std::sync::Arc;
 use crate::common::*;
 
 use cocoa::appkit::{
-    NSApp, NSApplication, NSApplicationActivationPolicyRegular, NSBackingStoreType, NSButton,
-    NSMenu, NSMenuItem, NSPasteboard, NSSquareStatusItemLength, NSStatusBar, NSStatusItem,
-    NSTabView, NSTabViewItem, NSView, NSViewHeightSizable, NSViewWidthSizable, NSWindow,
-    NSWindowStyleMask,
+    NSApp, NSApplication, NSBackingStoreType, NSButton, NSMenu, NSMenuItem, NSPasteboard,
+    NSSquareStatusItemLength, NSStatusBar, NSStatusItem, NSTabView, NSTabViewItem, NSView,
+    NSViewHeightSizable, NSViewWidthSizable, NSWindow, NSWindowStyleMask,
 };
 use cocoa::base::{id, nil, SEL};
 use cocoa::foundation::{NSArray, NSAutoreleasePool, NSPoint, NSRect, NSSize, NSString};
@@ -53,6 +52,7 @@ lazy_static! {
 struct EventResponder {
     obj_c_responder: Option<StrongPtr>,
     status_item: Option<StrongPtr>,
+    otp_setup_list: OtpSetupList,
     global_app_state: Arc<AtomicImmut<AppState>>,
     tx: Sender<UiEvent>,
     rx: Receiver<UiEvent>,
@@ -64,10 +64,12 @@ impl EventResponder {
         tx: Sender<UiEvent>,
         rx: Receiver<UiEvent>,
     ) -> Self {
+        let otp_setup_list = OtpSetupList::new(global_app_state.clone());
         Self {
             obj_c_responder: None,
             status_item: None,
             global_app_state,
+            otp_setup_list,
             tx,
             rx,
         }
@@ -80,6 +82,7 @@ impl EventResponder {
             (&mut *obj_c_responder).set_ivar("rust_responder", responder_ptr);
             self.obj_c_responder = Some(StrongPtr::new(obj_c_responder));
         }
+        self.otp_setup_list.instantiate_obj_c_setup_list();
     }
 
     pub extern "C" fn menu_selected(this: &Object, _sel: Sel, target: id) {
@@ -147,11 +150,18 @@ lazy_static! {
 }
 
 struct OtpSetupList {
-    app_state: Arc<AppState>,
+    global_app_state: Arc<AtomicImmut<AppState>>,
     obj_c_setup_list: Option<StrongPtr>,
 }
 
 impl OtpSetupList {
+    fn new(global_app_state: Arc<AtomicImmut<AppState>>) -> Self {
+        Self {
+            global_app_state,
+            obj_c_setup_list: None,
+        }
+    }
+
     fn instantiate_obj_c_setup_list(&mut self) {
         let obj_c_setup_list: id = unsafe { msg_send![*OTP_SETUP_LIST_CLASS, new] };
         unsafe {
@@ -177,7 +187,7 @@ impl OtpSetupList {
     }
 }
 
-fn setup_page(app_state: &AppState, frame: NSRect) -> id {
+fn setup_page(otp_setup_list: &OtpSetupList, frame: NSRect) -> id {
     unsafe {
         let scroll_view: id = msg_send![class!(NSScrollView), alloc];
         let _: () = msg_send![scroll_view, initWithFrame: frame];
@@ -187,10 +197,12 @@ fn setup_page(app_state: &AppState, frame: NSRect) -> id {
         let _: () = msg_send![table_view, setHeaderView: nil];
         let _: () = msg_send![scroll_view, setDocumentView: table_view];
 
-        // TODO: Manage the data source lifecycle better
-        let data_source: id = msg_send![*OTP_SETUP_LIST_CLASS, new];
-        let _: () = msg_send![table_view, setDataSource: data_source];
-        let _: () = msg_send![table_view, setDelegate: data_source];
+        let otp_objc = otp_setup_list
+            .obj_c_setup_list
+            .as_ref()
+            .expect("Must have instantiated the OTP setup list by now!");
+        let _: () = msg_send![table_view, setDataSource: **otp_objc];
+        let _: () = msg_send![table_view, setDelegate: **otp_objc];
 
         let column: id = msg_send![class!(NSTableColumn), alloc];
         let _: () = msg_send![column, initWithIdentifier: NSString::alloc(nil).init_str("Name").autorelease() ];
@@ -206,7 +218,7 @@ fn setup_page(app_state: &AppState, frame: NSRect) -> id {
     }
 }
 
-fn setup_window(app_state: Arc<AppState>) -> id {
+fn setup_window(otp_setup_list: &OtpSetupList) -> id {
     unsafe {
         let mut window_mask = NSWindowStyleMask::empty();
         window_mask.insert(NSWindowStyleMask::NSTitledWindowMask);
@@ -230,7 +242,7 @@ fn setup_window(app_state: Arc<AppState>) -> id {
             .initWithIdentifier_(nil)
             .autorelease();
         setup_item.setLabel_(NSString::alloc(nil).init_str("Setup").autorelease());
-        setup_item.setView_(setup_page(&app_state, content_frame));
+        setup_item.setView_(setup_page(otp_setup_list, content_frame));
         tab_view.addTabViewItem_(setup_item);
 
         let about_item = NSTabViewItem::alloc(nil)
@@ -328,7 +340,7 @@ fn process_events(event_responder: &mut EventResponder) {
             }
             UiEvent::OpenSetup => unsafe {
                 let app = NSApplication::sharedApplication(nil);
-                let window = setup_window(event_responder.global_app_state.load());
+                let window = setup_window(&event_responder.otp_setup_list);
                 NSApplication::activateIgnoringOtherApps_(app, YES);
                 window.makeKeyAndOrderFront_(app);
                 // TODO: Don't leak the window!
