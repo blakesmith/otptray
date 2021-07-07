@@ -9,7 +9,7 @@ use crate::common::*;
 use cocoa::appkit::{
     NSApp, NSApplication, NSBackingStoreType, NSButton, NSMenu, NSMenuItem, NSPasteboard,
     NSSquareStatusItemLength, NSStatusBar, NSStatusItem, NSTabView, NSTabViewItem, NSView,
-    NSWindow, NSWindowStyleMask,
+    NSViewHeightSizable, NSViewWidthSizable, NSWindow, NSWindowStyleMask,
 };
 use cocoa::base::{id, nil, SEL};
 use cocoa::foundation::{NSArray, NSAutoreleasePool, NSPoint, NSRect, NSSize, NSString};
@@ -203,7 +203,7 @@ impl OtpSetupList {
 fn setup_page(otp_setup_list: &OtpSetupList, frame: NSRect) -> id {
     let frame_with_margin = NSRect::new(
         NSPoint::new(0.0, 30.0),
-        NSSize::new(frame.size.width, frame.size.height - 100.0),
+        NSSize::new(frame.size.width, frame.size.height - 60.0),
     );
     unsafe {
         let table_box: id = msg_send![class!(NSBox), alloc];
@@ -214,10 +214,11 @@ fn setup_page(otp_setup_list: &OtpSetupList, frame: NSRect) -> id {
 
         let scroll_view: id = msg_send![class!(NSScrollView), alloc];
         let _: () = msg_send![scroll_view, initWithFrame: frame_with_margin];
+        NSView::setAutoresizingMask_(scroll_view, NSViewWidthSizable | NSViewHeightSizable);
         scroll_view.autorelease();
 
         let table_view: id = msg_send![class!(NSTableView), alloc];
-        let _: () = msg_send![table_view, initWithFrame: frame_with_margin];
+        let _: () = msg_send![table_view, initWithFrame: frame];
         let _: () = msg_send![table_view, setHeaderView: nil];
         let _: () = msg_send![scroll_view, setDocumentView: table_view];
         let _: () = msg_send![table_box, addSubview: scroll_view];
@@ -241,7 +242,7 @@ fn setup_page(otp_setup_list: &OtpSetupList, frame: NSRect) -> id {
         let add_image: id = msg_send![class!(NSImage), imageNamed: NSString::alloc(nil).init_str("NSAddTemplate").autorelease() ];
         let remove_image: id = msg_send![class!(NSImage), imageNamed: NSString::alloc(nil).init_str("NSRemoveTemplate").autorelease() ];
         let button_segment: id = msg_send![class!(NSSegmentedControl), alloc];
-        let _: () = msg_send![button_segment, initWithFrame: NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(frame.size.width, 50.0))];
+        let _: () = msg_send![button_segment, initWithFrame: NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(frame.size.width, 10.0))];
         let _: () = msg_send![button_segment, setSegmentCount: 2];
         let _: () = msg_send![button_segment, setImage: add_image forSegment: 0 ];
         let _: () = msg_send![button_segment, setImage: remove_image forSegment: 1 ];
@@ -258,6 +259,7 @@ fn setup_window(otp_setup_list: &OtpSetupList) -> id {
         let mut window_mask = NSWindowStyleMask::empty();
         window_mask.insert(NSWindowStyleMask::NSTitledWindowMask);
         window_mask.insert(NSWindowStyleMask::NSClosableWindowMask);
+        window_mask.insert(NSWindowStyleMask::NSResizableWindowMask);
         let content_frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(350.0, 300.0));
         let window = NSWindow::alloc(nil).initWithContentRect_styleMask_backing_defer_(
             content_frame,
@@ -285,6 +287,7 @@ fn setup_window(otp_setup_list: &OtpSetupList) -> id {
         about_item.setLabel_(NSString::alloc(nil).init_str("About").autorelease());
         tab_view.addTabViewItem_(about_item);
 
+        NSView::setAutoresizingMask_(tab_view, NSViewWidthSizable | NSViewHeightSizable);
         NSView::addSubview_(window.contentView(), tab_view);
 
         window
