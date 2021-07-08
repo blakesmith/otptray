@@ -196,7 +196,7 @@ impl OtpSetupList {
     ) -> id {
         let setup_list = Self::rust_setup_list(this);
         let otp_entry = &setup_list.app_state.otp_entries[row as usize];
-        unsafe { NSString::alloc(nil).init_str(&otp_entry.name) }
+        unsafe { NSString::alloc(nil).init_str(&otp_entry.name).autorelease() }
     }
 }
 
