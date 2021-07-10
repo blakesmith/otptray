@@ -893,6 +893,7 @@ version = "0.1.0"
 dependencies = [
  "atomic_immut",
  "base32",
+ "clap",
  "cocoa",
  "cocoa-foundation",
  "core-foundation",

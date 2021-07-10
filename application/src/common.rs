@@ -299,3 +299,9 @@ impl OtpValue {
 pub struct OtpTrayConfig {
     entries: Vec<OtpEntry>,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ActivationPolicy {
+    Foreground,
+    Background,
+}

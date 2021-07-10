@@ -442,7 +442,7 @@ fn start_timer(event_responder: &EventResponder) {
     }
 }
 
-pub fn ui_main(global_app_state: Arc<AtomicImmut<AppState>>) {
+pub fn ui_main(global_app_state: Arc<AtomicImmut<AppState>>, activation_policy: ActivationPolicy) {
     log::info!("Staring macOS ui main");
     let (tx, rx) = channel();
     let mut event_responder = EventResponder::new(global_app_state, tx.clone(), rx);
@@ -450,7 +450,9 @@ pub fn ui_main(global_app_state: Arc<AtomicImmut<AppState>>) {
 
     unsafe {
         let app = NSApp();
-        //        app.setActivationPolicy_(cocoa::appkit::NSApplicationActivationPolicyRegular);
+        if activation_policy == ActivationPolicy::Foreground {
+            app.setActivationPolicy_(cocoa::appkit::NSApplicationActivationPolicyRegular);
+        }
         let _ = tx.send(UiEvent::TotpRefresh);
         process_events(&mut event_responder);
         start_timer(&event_responder);

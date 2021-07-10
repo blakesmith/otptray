@@ -333,7 +333,7 @@ fn build_menu(app_state: Arc<AppState>, tx: glib::Sender<UiEvent>) -> (AppState,
     (new_app_state, menu)
 }
 
-pub fn ui_main(global_app_state: Arc<AtomicImmut<AppState>>) {
+pub fn ui_main(global_app_state: Arc<AtomicImmut<AppState>>, _activation_policy: ActivationPolicy) {
     log::info!("Staring linux GTK ui main");
     gtk::init().unwrap();
 
