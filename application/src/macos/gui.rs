@@ -144,6 +144,11 @@ lazy_static! {
                 sel!(tableView:objectValueForTableColumn:row:),
                 OtpSetupList::table_view_object_value_for as extern "C" fn(&Object, Sel, id, id, i64) -> id,
             );
+
+            class_decl.add_method(
+                sel!(tableViewSelectionDidChange:),
+                OtpSetupList::table_view_selection_did_change as extern "C" fn(&Object, Sel, id)
+            );
         }
         class_decl.register()
     };
@@ -198,9 +203,17 @@ impl OtpSetupList {
         let otp_entry = &setup_list.app_state.otp_entries[row as usize];
         unsafe { NSString::alloc(nil).init_str(&otp_entry.name).autorelease() }
     }
+
+    pub extern "C" fn table_view_selection_did_change(_this: &Object, _sel: Sel, notification: id) {
+        unsafe {
+            let table_view: id = msg_send![notification, object];
+            let selected_row_index: i64 = msg_send![table_view, selectedRow];
+            log::debug!("Got selection change. Row index: {}", selected_row_index);
+        }
+    }
 }
 
-fn setup_page(otp_setup_list: &OtpSetupList, frame: NSRect) -> id {
+fn setup_page(event_responder: &mut EventResponder, frame: NSRect) -> id {
     let frame_with_margin = NSRect::new(
         NSPoint::new(0.0, 30.0),
         NSSize::new(frame.size.width, frame.size.height - 60.0),
@@ -223,7 +236,8 @@ fn setup_page(otp_setup_list: &OtpSetupList, frame: NSRect) -> id {
         let _: () = msg_send![scroll_view, setDocumentView: table_view];
         let _: () = msg_send![table_box, addSubview: scroll_view];
 
-        let otp_objc = otp_setup_list
+        let otp_objc = event_responder
+            .otp_setup_list
             .obj_c_setup_list
             .as_ref()
             .expect("Must have instantiated the OTP setup list by now!");
@@ -255,7 +269,7 @@ fn setup_page(otp_setup_list: &OtpSetupList, frame: NSRect) -> id {
     }
 }
 
-fn setup_window(otp_setup_list: &OtpSetupList) -> id {
+fn setup_window(event_responder: &mut EventResponder) -> id {
     unsafe {
         let mut window_mask = NSWindowStyleMask::empty();
         window_mask.insert(NSWindowStyleMask::NSTitledWindowMask);
@@ -279,7 +293,7 @@ fn setup_window(otp_setup_list: &OtpSetupList) -> id {
             .initWithIdentifier_(nil)
             .autorelease();
         setup_item.setLabel_(NSString::alloc(nil).init_str("Setup").autorelease());
-        setup_item.setView_(setup_page(otp_setup_list, content_frame));
+        setup_item.setView_(setup_page(event_responder, content_frame));
         tab_view.addTabViewItem_(setup_item);
 
         let about_item = NSTabViewItem::alloc(nil)
@@ -377,7 +391,7 @@ fn process_events(event_responder: &mut EventResponder) {
             }
             UiEvent::OpenSetup => unsafe {
                 let app = NSApplication::sharedApplication(nil);
-                let window = setup_window(&event_responder.otp_setup_list);
+                let window = setup_window(event_responder);
                 NSApplication::activateIgnoringOtherApps_(app, YES);
                 window.makeKeyAndOrderFront_(app);
                 // Windows should automatically get released upon close
@@ -436,6 +450,7 @@ pub fn ui_main(global_app_state: Arc<AtomicImmut<AppState>>) {
 
     unsafe {
         let app = NSApp();
+        //        app.setActivationPolicy_(cocoa::appkit::NSApplicationActivationPolicyRegular);
         let _ = tx.send(UiEvent::TotpRefresh);
         process_events(&mut event_responder);
         start_timer(&event_responder);
