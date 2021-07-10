@@ -258,13 +258,15 @@ fn setup_page(event_responder: &mut EventResponder, frame: NSRect) -> id {
 
         let _: () = msg_send![table_view, addTableColumn: column];
 
-        let add_image: id = msg_send![class!(NSImage), imageNamed: NSString::alloc(nil).init_str("NSAddTemplate").autorelease() ];
-        let remove_image: id = msg_send![class!(NSImage), imageNamed: NSString::alloc(nil).init_str("NSRemoveTemplate").autorelease() ];
+        let add_label: id = NSString::alloc(nil).init_str("Add").autorelease();
+        let edit_label: id = NSString::alloc(nil).init_str("Edit").autorelease();
+        let remove_label: id = NSString::alloc(nil).init_str("Remove").autorelease();
         let button_segment: id = msg_send![class!(NSSegmentedControl), alloc];
         let _: () = msg_send![button_segment, initWithFrame: NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(frame.size.width, 10.0))];
-        let _: () = msg_send![button_segment, setSegmentCount: 2];
-        let _: () = msg_send![button_segment, setImage: add_image forSegment: 0 ];
-        let _: () = msg_send![button_segment, setImage: remove_image forSegment: 1 ];
+        let _: () = msg_send![button_segment, setSegmentCount: 3];
+        let _: () = msg_send![button_segment, setLabel: add_label forSegment: 0 ];
+        let _: () = msg_send![button_segment, setLabel: edit_label forSegment: 1 ];
+        let _: () = msg_send![button_segment, setLabel: remove_label forSegment: 2 ];
         let _: () = msg_send![button_segment, sizeToFit];
         let _: () = msg_send![table_box, addSubview: button_segment];
         button_segment.autorelease();
