@@ -157,6 +157,7 @@ lazy_static! {
 struct OtpSetupList {
     app_state: Arc<AppState>,
     obj_c_setup_list: Option<StrongPtr>,
+    selected_item: Option<usize>,
 }
 
 impl OtpSetupList {
@@ -164,6 +165,7 @@ impl OtpSetupList {
         Self {
             app_state,
             obj_c_setup_list: None,
+            selected_item: None,
         }
     }
 
@@ -176,13 +178,13 @@ impl OtpSetupList {
         }
     }
 
-    fn rust_setup_list(this: &Object) -> &OtpSetupList {
+    fn rust_setup_list(this: &Object) -> &mut OtpSetupList {
         unsafe {
             let setup_list_ptr = *this.get_ivar::<*mut c_void>("rust_otp_setup_list");
             if setup_list_ptr.is_null() {
                 panic!("Got back a null rust OTP Setup list pointer. This should never happen!");
             }
-            &*(setup_list_ptr as *const OtpSetupList)
+            &mut *(setup_list_ptr as *mut OtpSetupList)
         }
     }
 
@@ -204,10 +206,12 @@ impl OtpSetupList {
         unsafe { NSString::alloc(nil).init_str(&otp_entry.name).autorelease() }
     }
 
-    pub extern "C" fn table_view_selection_did_change(_this: &Object, _sel: Sel, notification: id) {
+    pub extern "C" fn table_view_selection_did_change(this: &Object, _sel: Sel, notification: id) {
         unsafe {
             let table_view: id = msg_send![notification, object];
             let selected_row_index: i64 = msg_send![table_view, selectedRow];
+            let mut setup_list = Self::rust_setup_list(this);
+            setup_list.selected_item = Some(selected_row_index as usize);
             log::debug!("Got selection change. Row index: {}", selected_row_index);
         }
     }
