@@ -235,6 +235,7 @@ fn setup_page(otp_setup_list: &OtpSetupList, frame: NSRect) -> id {
         let _: () = msg_send![column, initWithIdentifier: NSString::alloc(nil).init_str("Name").autorelease() ];
         let _: () =
             msg_send![column, setTitle: NSString::alloc(nil).init_str("Name").autorelease() ];
+        let _: () = msg_send![column, setEditable: NO];
         column.autorelease();
 
         let _: () = msg_send![table_view, addTableColumn: column];
