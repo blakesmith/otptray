@@ -41,6 +41,10 @@ lazy_static! {
                 EventResponder::setup as extern "C" fn(&Object, Sel),
             );
             class_decl.add_method(
+                sel!(open_entry:),
+                EventResponder::open_entry as extern "C" fn(&Object, Sel, id),
+            );
+            class_decl.add_method(
                 sel!(quit),
                 EventResponder::quit as extern "C" fn(&Object, Sel),
             );
@@ -100,6 +104,28 @@ impl EventResponder {
         let _ = &responder.tx.send(UiEvent::TotpRefresh);
 
         process_events(responder);
+    }
+
+    pub extern "C" fn open_entry(this: &Object, _sel: Sel, sender: id) {
+        unsafe {
+            let selected_segment: i64 = msg_send![sender, selectedSegment];
+            let responder = Self::rust_responder(this);
+            if let Some(event) = match selected_segment {
+                0 => Some(UiEvent::OpenEntry(EntryAction::Add)),
+                1 => responder
+                    .otp_setup_list
+                    .selected_item
+                    .map(|selected| UiEvent::OpenEntry(EntryAction::Edit(selected))),
+                2 => responder
+                    .otp_setup_list
+                    .selected_item
+                    .map(|selected| UiEvent::RemoveEntry(selected)),
+                _ => None,
+            } {
+                let _ = &responder.tx.send(event);
+                process_events(responder);
+            }
+        }
     }
 
     pub extern "C" fn setup(this: &Object, _sel: Sel) {
@@ -261,11 +287,18 @@ fn setup_page(event_responder: &mut EventResponder, frame: NSRect) -> id {
 
         let _: () = msg_send![table_view, addTableColumn: column];
 
+        let event_responder_objc = event_responder
+            .obj_c_responder
+            .as_ref()
+            .expect("Must have instantiated the event responder by now!");
+
         let add_label: id = NSString::alloc(nil).init_str("Add").autorelease();
         let edit_label: id = NSString::alloc(nil).init_str("Edit").autorelease();
         let remove_label: id = NSString::alloc(nil).init_str("Remove").autorelease();
         let button_segment: id = msg_send![class!(NSSegmentedControl), alloc];
         let _: () = msg_send![button_segment, initWithFrame: NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(frame.size.width, 10.0))];
+        let _: () = msg_send![button_segment, setTarget: **event_responder_objc];
+        let _: () = msg_send![button_segment, setAction: sel!(open_entry:)];
         let _: () = msg_send![button_segment, setSegmentCount: 3];
         let _: () = msg_send![button_segment, setLabel: add_label forSegment: 0 ];
         let _: () = msg_send![button_segment, setLabel: edit_label forSegment: 1 ];
