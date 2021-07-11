@@ -8,8 +8,8 @@ use crate::common::*;
 
 use cocoa::appkit::{
     NSApp, NSApplication, NSBackingStoreType, NSButton, NSMenu, NSMenuItem, NSPasteboard,
-    NSSquareStatusItemLength, NSStatusBar, NSStatusItem, NSTabView, NSTabViewItem, NSView,
-    NSViewHeightSizable, NSViewWidthSizable, NSWindow, NSWindowStyleMask,
+    NSSquareStatusItemLength, NSStatusBar, NSStatusItem, NSTabView, NSTabViewItem, NSTextField,
+    NSView, NSViewHeightSizable, NSViewWidthSizable, NSWindow, NSWindowStyleMask,
 };
 use cocoa::base::{id, nil, SEL};
 use cocoa::foundation::{NSArray, NSAutoreleasePool, NSPoint, NSRect, NSSize, NSString};
@@ -328,13 +328,34 @@ fn otp_entry_window(
             NSBackingStoreType::NSBackingStoreBuffered,
             NO,
         );
+        let window_title = NSString::alloc(nil)
+            .init_str(entry_action.window_title())
+            .autorelease();
+
         window.center();
-        NSWindow::setTitle_(
-            window,
-            NSString::alloc(nil)
-                .init_str(entry_action.window_title())
-                .autorelease(),
+        NSWindow::setTitle_(window, window_title);
+
+        let table_box: id = msg_send![class!(NSBox), alloc];
+        let _: () = msg_send![table_box, initWithFrame: content_frame];
+        let _: () = msg_send![table_box, setTitle: window_title];
+        NSView::setAutoresizingMask_(table_box, NSViewWidthSizable | NSViewHeightSizable);
+        table_box.autorelease();
+
+        let name_field = NSTextField::alloc(nil);
+        NSTextField::initWithFrame_(
+            name_field,
+            NSRect::new(
+                NSPoint::new(0.0, content_frame.size.height - 60.0),
+                NSSize::new(content_frame.size.width, 20.0),
+            ),
         );
+        let _: () = msg_send![name_field, setBezeled: YES];
+        let _: () = msg_send![name_field, setDrawsBackground: YES];
+        NSView::setAutoresizingMask_(name_field, NSViewWidthSizable);
+        NSView::addSubview_(table_box, name_field);
+        name_field.autorelease();
+
+        NSView::addSubview_(window.contentView(), table_box);
         window
     }
 }
