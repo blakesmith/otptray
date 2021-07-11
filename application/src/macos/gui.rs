@@ -311,6 +311,34 @@ fn setup_page(event_responder: &mut EventResponder, frame: NSRect) -> id {
     }
 }
 
+fn otp_entry_window(
+    otp_entry: &OtpEntry,
+    entry_action: EntryAction,
+    event_responder: &mut EventResponder,
+) -> id {
+    unsafe {
+        let mut window_mask = NSWindowStyleMask::empty();
+        window_mask.insert(NSWindowStyleMask::NSTitledWindowMask);
+        window_mask.insert(NSWindowStyleMask::NSClosableWindowMask);
+        window_mask.insert(NSWindowStyleMask::NSResizableWindowMask);
+        let content_frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(350.0, 300.0));
+        let window = NSWindow::alloc(nil).initWithContentRect_styleMask_backing_defer_(
+            content_frame,
+            window_mask,
+            NSBackingStoreType::NSBackingStoreBuffered,
+            NO,
+        );
+        window.center();
+        NSWindow::setTitle_(
+            window,
+            NSString::alloc(nil)
+                .init_str(entry_action.window_title())
+                .autorelease(),
+        );
+        window
+    }
+}
+
 fn setup_window(event_responder: &mut EventResponder) -> id {
     unsafe {
         let mut window_mask = NSWindowStyleMask::empty();
@@ -438,6 +466,15 @@ fn process_events(event_responder: &mut EventResponder) {
                 window.makeKeyAndOrderFront_(app);
                 // Windows should automatically get released upon close
                 // See: 'releaseWhenClosed' property.
+            },
+            UiEvent::OpenEntry(entry_action) => match entry_action {
+                EntryAction::Add => unsafe {
+                    let app = NSApplication::sharedApplication(nil);
+                    let window =
+                        otp_entry_window(&Default::default(), entry_action, event_responder);
+                    window.makeKeyAndOrderFront_(app);
+                },
+                EntryAction::Edit(selected_row) => {}
             },
             UiEvent::Quit => {
                 unsafe {
