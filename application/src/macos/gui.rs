@@ -211,7 +211,10 @@ impl OtpSetupList {
             let table_view: id = msg_send![notification, object];
             let selected_row_index: i64 = msg_send![table_view, selectedRow];
             let mut setup_list = Self::rust_setup_list(this);
-            setup_list.selected_item = Some(selected_row_index as usize);
+            setup_list.selected_item = match selected_row_index {
+                -1 => None,
+                index => Some(index as usize),
+            };
             log::debug!("Got selection change. Row index: {}", selected_row_index);
         }
     }
