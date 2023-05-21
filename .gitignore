@@ -5,3 +5,4 @@ otptray*_amd64
 .DS_Store
 *.app
 result
+target
