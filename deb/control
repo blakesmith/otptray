@@ -1,6 +1,6 @@
 Package: otptray
 Version: 0.0.1
 Architecture: amd64
-Maintainer: Blake Smith <blake@sproutsocial.com>
+Maintainer: Blake Smith <blakesmith0@gmail.com>
 Depends: libgtk-3-0, libappindicator3-1
 Description: Convenient 2FA and TOTP tray indicator
