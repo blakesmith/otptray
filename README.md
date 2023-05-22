@@ -46,6 +46,12 @@ otptray also works on macoOS, though the configuration dialog is not
 currently functional. You'll need to setup the YAML file manually, but
 everything should work fine after that.
 
+![macoOS system tray dropdown](https://raw.github.com/blakesmith/otptray/master/assets/macos_dropdown.png)
+
+On macOS, the YAML file should be located at:
+
+`$HOME/Library/Application\ Support/otptray.yaml`
+
 ## Building on Linux
 
 If you use the nix package manager, from the root of this repo, with flakes enabled:
@@ -55,3 +61,7 @@ $ nix build
 ```
 
 The `otptray` executable will be in `result/bin/otptray`.
+
+## Building on macOS
+
+TODO
